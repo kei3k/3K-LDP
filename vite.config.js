@@ -22,10 +22,20 @@ export default defineConfig({
           }
           
           try {
-            const html = await fetchWithRedirects(url, 5);
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.end(html);
+            const result = await fetchWithRedirects(url, 5);
+            
+            // Binary mode: if content-type is image, return raw buffer
+            if (result.contentType && result.contentType.startsWith('image/')) {
+              res.setHeader('Content-Type', result.contentType);
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(result.buffer);
+            } else {
+              // Text mode: return as UTF-8 string
+              const html = result.buffer.toString('utf-8');
+              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(html);
+            }
           } catch (e) {
             console.error('[Proxy] Error:', e.message);
             res.statusCode = 502;
@@ -65,10 +75,14 @@ function fetchWithRedirects(url, maxRedirects = 5) {
       timeout: 15000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/jpeg,image/png,*/*;q=0.8',
         'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
         'Accept-Encoding': 'identity',
         'Connection': 'keep-alive',
+        // Add Referer for alicdn.com images (prevents 403)
+        ...(parsedUrl.hostname.includes('alicdn.com') || parsedUrl.hostname.includes('1688.com')
+          ? { 'Referer': 'https://detail.1688.com/' }
+          : {}),
       },
       rejectUnauthorized: false, // Accept self-signed certs
     };
@@ -87,11 +101,12 @@ function fetchWithRedirects(url, maxRedirects = 5) {
       }
 
       const chunks = [];
+      const contentType = response.headers['content-type'] || '';
       response.on('data', chunk => chunks.push(chunk));
       response.on('end', () => {
-        const html = Buffer.concat(chunks).toString('utf-8');
-        console.log('[Proxy] Success:', url, '- Size:', html.length);
-        resolve(html);
+        const buffer = Buffer.concat(chunks);
+        console.log('[Proxy] Success:', url, '- Size:', buffer.length, '- Type:', contentType);
+        resolve({ buffer, contentType });
       });
       response.on('error', reject);
     });

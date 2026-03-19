@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head><title>LDP Debug v4 — Section Delete Save Test</title>
+<style>
+body{font-family:sans-serif;margin:20px;background:#1a1a2e;color:#eee}
+.test{background:#16213e;border:1px solid #333;border-radius:8px;padding:15px;margin:15px 0}
+h2{color:#e94560} button{padding:8px 16px;margin:5px;border:none;border-radius:4px;cursor:pointer;font-size:14px}
+.btn1{background:#e94560;color:white} .btn2{background:#0f3460;color:white}
+pre{background:#0a0a23;padding:10px;border-radius:4px;max-height:200px;font-size:11px;white-space:pre-wrap;overflow:auto}
+iframe{border:2px solid #333;border-radius:4px;background:white}
+</style></head>
+<body>
+<h1>Section Delete Save Test v4</h1>
+<div class="test">
+<h2>Test: Delete section & verify it's SAVED</h2>
+<p>1. Click "Section Mode" → 2. Click a section → 3. Verify log says saved → 4. Click "Reload from saved" to confirm</p>
+<button class="btn1" onclick="toggleSec()">Section Mode</button>
+<button class="btn2" onclick="loadSaved()">Reload from saved HTML</button>
+<button class="btn2" onclick="resetAll()">Reset</button>
+<span id="status" style="margin-left:10px;color:#0f0"></span>
+<iframe id="f" width="100%" height="400" sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
+<pre id="log">Ready</pre>
+</div>
+
+<script>
+// Template with wrapper div (simulating real Chinese e-commerce template)
+var ORIG='<html><head></head><body style="margin:0"><div id="app"><div style="padding:20px;background:#f5f5f5"><h1>Section A — Header</h1><p>Header content</p></div><div style="padding:20px;background:#e0e0e0"><h2>Section B — Features</h2><p>Features content</p></div><div style="padding:20px;background:#d0d0d0"><h2>Section C — Feedback</h2><p>Feedback content</p></div><div style="padding:20px;background:#c0c0c0"><h2>Section D — Footer</h2><p>Footer content</p></div></div></body></html>';
+var savedHtml=ORIG;
+var secOn=false;
+
+// Same script as PreviewPanel.jsx
+var SEC_SCRIPT=[
+'<script>',
+'(function(){',
+'  var hl=document.createElement("div");',
+'  hl.setAttribute("data-ldp-ui","1");',
+'  hl.style.cssText="position:fixed;pointer-events:none;border:3px dashed red;z-index:99998;display:none;transition:all 0.15s;";',
+'  document.body.appendChild(hl);',
+'  var ov=document.createElement("div");',
+'  ov.setAttribute("data-ldp-ui","1");',
+'  ov.style.cssText="position:fixed;top:0;left:0;right:0;padding:12px;background:rgba(239,68,68,0.95);color:white;font:bold 14px sans-serif;text-align:center;z-index:99999;pointer-events:none;";',
+'  ov.textContent="Click vao section muon XOA";',
+'  document.body.appendChild(ov);',
+'  function realKids(par){',
+'    var arr=[];',
+'    for(var i=0;i<par.children.length;i++){',
+'      var c=par.children[i];',
+'      if(!c.hasAttribute("data-ldp-ui")&&c.tagName!=="SCRIPT")arr.push(c);',
+'    }',
+'    return arr;',
+'  }',
+'  function findSec(el){',
+'    if(!el||el===document.body)return null;',
+'    var p=el;',
+'    while(p&&p.parentElement){',
+'      var par=p.parentElement;',
+'      var kids=realKids(par);',
+'      if(par===document.body||kids.length>=2){',
+'        if(p.offsetHeight>20){',
+'          var idx=kids.indexOf(p);',
+'          if(idx===-1)idx=0;',
+'          return {el:p,cont:par,idx:idx};',
+'        }',
+'      }',
+'      p=par;',
+'    }',
+'    return null;',
+'  }',
+'  function getPath(el){',
+'    var parts=[];',
+'    while(el&&el!==document.body&&el!==document.documentElement){',
+'      var t=el.tagName.toLowerCase();',
+'      var par=el.parentElement;',
+'      if(par){',
+'        var kids=realKids(par);',
+'        var c=0;',
+'        for(var i=0;i<kids.length;i++){',
+'          if(kids[i]===el)break;',
+'          if(kids[i].tagName===el.tagName)c++;',
+'        }',
+'        parts.unshift(t+":nth-of-type("+(c+1)+")");',
+'      } else parts.unshift(t);',
+'      el=par;',
+'    }',
+'    return parts.join(">");',
+'  }',
+'  var cur=null;',
+'  document.addEventListener("mouseover",function(e){',
+'    if(e.target.hasAttribute&&e.target.hasAttribute("data-ldp-ui"))return;',
+'    var s=findSec(e.target);',
+'    if(s&&s.el!==cur){',
+'      cur=s.el;var r=s.el.getBoundingClientRect();',
+'      hl.style.display="block";hl.style.top=r.top+"px";hl.style.left=r.left+"px";hl.style.width=r.width+"px";hl.style.height=r.height+"px";',
+'    }',
+'  });',
+'  document.addEventListener("click",function(e){',
+'    e.preventDefault();e.stopPropagation();',
+'    if(e.target.hasAttribute&&e.target.hasAttribute("data-ldp-ui"))return;',
+'    var s=findSec(e.target);',
+'    if(s){',
+'      var cp=getPath(s.cont);',
+'      hl.style.display="none";',
+'      parent.postMessage({type:"ldp-remove-section",containerPath:cp,childIndex:s.idx},"*");',
+'      s.el.remove();cur=null;',
+'    }',
+'  },true);',
+'})();',
+'<\/script>'
+].join('\n');
+
+function removeSectionFromHtml(html,containerPath,childIndex){
+  try{
+    var parser=new DOMParser();
+    var doc=parser.parseFromString(html,'text/html');
+    var container=containerPath?doc.querySelector(containerPath):null;
+    if(!container)container=doc.body;
+    var children=container.children;
+    if(childIndex>=0&&childIndex<children.length){
+      var removed=children[childIndex].textContent.substring(0,50);
+      children[childIndex].remove();
+      var result='';
+      if(doc.doctype)result=new XMLSerializer().serializeToString(doc.doctype)+'\n';
+      result+=doc.documentElement.outerHTML;
+      return {html:result,removed:removed};
+    }
+    return {html:html,removed:null};
+  } catch(e){return {html:html,removed:null};}
+}
+
+function loadIframe(html){
+  var f=document.getElementById('f');
+  var blob=new Blob([html],{type:'text/html'});
+  f.src=URL.createObjectURL(blob);
+}
+
+function toggleSec(){
+  secOn=!secOn;
+  var html=savedHtml;
+  if(secOn){
+    if(html.includes('</body>'))html=html.replace('</body>',SEC_SCRIPT+'\n</body>');
+    else html+=SEC_SCRIPT;
+  }
+  loadIframe(html);
+  document.getElementById('status').textContent=secOn?'🔴 Section mode ON':'⚪ Section mode OFF';
+}
+
+function loadSaved(){
+  secOn=false;
+  loadIframe(savedHtml);
+  var divCount=(savedHtml.match(/<div/gi)||[]).length;
+  document.getElementById('log').textContent+='\\nReloaded from saved HTML. Divs: '+divCount+', Length: '+savedHtml.length;
+  document.getElementById('status').textContent='⚪ Loaded saved HTML';
+}
+
+function resetAll(){
+  savedHtml=ORIG;secOn=false;
+  loadIframe(savedHtml);
+  document.getElementById('log').textContent='Reset to original';
+  document.getElementById('status').textContent='';
+}
+
+window.addEventListener('message',function(e){
+  if(e.data&&e.data.type==='ldp-remove-section'){
+    var logEl=document.getElementById('log');
+    var cp=e.data.containerPath;
+    var ci=e.data.childIndex;
+    logEl.textContent+='\\nReceived: containerPath='+cp+' childIndex='+ci;
+    
+    var result=removeSectionFromHtml(savedHtml,cp,ci);
+    if(result.removed){
+      savedHtml=result.html;
+      logEl.textContent+='\\n✅ SAVED! Removed: "'+result.removed+'"';
+      logEl.textContent+='\\nNew saved length: '+savedHtml.length;
+      secOn=false;
+      document.getElementById('status').textContent='✅ Section deleted & saved!';
+    } else {
+      logEl.textContent+='\\n❌ FAILED to find section';
+    }
+  }
+});
+
+resetAll();
+</script>
+</body>
+</html>

@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { Copy, Download, Check, FileCode, Globe } from 'lucide-react';
+import { Copy, Download, Check, FileCode, Globe, FileArchive, Loader2 } from 'lucide-react';
 import { toWebcakeFormat } from '@/lib/generator';
+import { generatePkeBuffer } from '@/lib/htmlToPke';
+import { rehostImages } from '@/lib/imageRehost';
 
 /**
  * Export buttons: Copy for Webcake, Download HTML, Deploy
  */
 export default function ExportButtons({ html, productName }) {
   const [copied, setCopied] = useState(false);
+  const [pkeLoading, setPkeLoading] = useState(false);
+  const [pkeStatus, setPkeStatus] = useState('');
 
   if (!html) return null;
 
@@ -25,6 +29,41 @@ export default function ExportButtons({ html, productName }) {
     a.download = `${productName || 'landing'}-page.html`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadPke = async () => {
+    setPkeLoading(true);
+    setPkeStatus('Đang chuẩn bị...');
+
+    try {
+      let webcakeHtml = toWebcakeFormat(html);
+
+      // Re-host external images (1688, alicdn, etc.) to ImgBB
+      setPkeStatus('🖼️ Đang re-host ảnh...');
+      webcakeHtml = await rehostImages(webcakeHtml, (msg) => setPkeStatus(msg));
+
+      // Generate PKE buffer (MessagePack + Base64)
+      setPkeStatus('📦 Đang tạo file PKE...');
+      const base64Pke = generatePkeBuffer(webcakeHtml, productName);
+
+      // Webcake expects .pke files to be base64-encoded text, NOT raw binary
+      const blob = new Blob([base64Pke], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${productName || 'landing'}-page.pke`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setPkeStatus('✅ Đã tải xong!');
+      setTimeout(() => setPkeStatus(''), 3000);
+    } catch (err) {
+      console.error('[PKE] Error:', err);
+      setPkeStatus('❌ Lỗi: ' + err.message);
+      setTimeout(() => setPkeStatus(''), 5000);
+    } finally {
+      setPkeLoading(false);
+    }
   };
 
   return (
@@ -50,6 +89,34 @@ export default function ExportButtons({ html, productName }) {
           Tải HTML
         </button>
       </div>
+
+      <button
+        onClick={downloadPke}
+        disabled={pkeLoading}
+        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg text-sm font-medium transition-all ${
+          pkeLoading
+            ? 'bg-muted text-muted-foreground border-border cursor-wait'
+            : 'bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary'
+        }`}
+      >
+        {pkeLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Đang xử lý...
+          </>
+        ) : (
+          <>
+            <FileArchive className="w-4 h-4" />
+            Tải file .PKE (Webcake)
+          </>
+        )}
+      </button>
+
+      {pkeStatus && (
+        <p className="text-xs text-center text-muted-foreground animate-pulse">
+          {pkeStatus}
+        </p>
+      )}
 
       <button
         onClick={() => window.open('https://vercel.com/new', '_blank')}
