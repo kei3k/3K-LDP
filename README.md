@@ -1,136 +1,102 @@
-# 🚀 LDP Generator — Landing Page Clone Tool
+# 🚀 LDP Generator — Template PKE + Dịch Ảnh
 
-Công cụ clone và localize landing page sử dụng AI (Gemini). Giữ nguyên 100% layout/design gốc, chỉ thay nội dung sản phẩm và ngôn ngữ.
+Công cụ tạo Landing Page từ Template PKE Webcake & dịch ảnh sản phẩm bằng AI.
 
-![Preview](https://img.shields.io/badge/React-19-blue) ![Vite](https://img.shields.io/badge/Vite-7-purple) ![AI](https://img.shields.io/badge/Gemini-3.1_Pro-green)
+## ⚡ Cài đặt nhanh
 
-## ✨ Tính năng
+### Yêu cầu
+- **Node.js** phiên bản 18 trở lên — [Tải tại đây](https://nodejs.org/)
+- **Git** — [Tải tại đây](https://git-scm.com/)
+- **Gemini API Key** — [Lấy miễn phí tại AI Studio](https://aistudio.google.com/apikey)
 
-- 🔄 **Clone Landing Page** — Giữ nguyên HTML/CSS/JS gốc, chỉ thay text sản phẩm
-- 🌍 **Đa ngôn ngữ** — Dịch toàn bộ sang Tiếng Việt, English, Thai, Chinese, Japanese, Korean, Indonesia
-- 📱 **Preview responsive** — Xem trước trên 13+ thiết bị (iPhone, Galaxy, iPad, Desktop)
-- ✏️ **Inline Editor** — Chỉnh sửa text và hình ảnh trực tiếp trên landing page
-- 📝 **Custom Form Fields** — Thêm trường tùy chỉnh vào form đăng ký
-- ✨ **Custom Prompt** — Yêu cầu Gemini điều chỉnh thiết kế theo ý bạn
-- 📊 **Tracking** — Tích hợp Google Ads, Facebook Pixel, TikTok Pixel, Google Sheet webhook
-- 📦 **Export** — Copy HTML cho Webcake.io, tải file HTML, deploy lên Vercel
+---
 
-## 📋 Yêu cầu
+### 🪟 Windows
 
-- [Node.js](https://nodejs.org/) phiên bản **18+** (khuyến nghị LTS)
-- [Gemini API Key](https://aistudio.google.com/apikey) (miễn phí)
+```powershell
+# 1. Clone repo (lần đầu)
+git clone https://github.com/kei3k/3K-LDP.git
+cd 3K-LDP
 
-## 🚀 Cài đặt & Chạy
-
-### Windows (1 click)
-
-```
-Nhấp đúp vào file: install_and_run.bat
-```
-
-### Mac / Linux
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### Hoặc chạy thủ công
-
-```bash
-# Cài đặt thư viện
+# 2. Cài dependencies
 npm install
 
-# Chạy
+# 3. Chạy
 npm run dev
 ```
 
-Mở trình duyệt tại **http://localhost:5173**
-
-## 📖 Hướng dẫn sử dụng
-
-### Bước 1: Cấu hình API
-1. Lấy API key miễn phí tại [Google AI Studio](https://aistudio.google.com/apikey)
-2. Dán API key vào phần **"Cài đặt API"**
-3. Chọn model (khuyến nghị **Gemini 3.1 Pro**)
-
-### Bước 2: Nhập thông tin sản phẩm
-- **Tên sản phẩm**: Tên sản phẩm mới của bạn
-- **Mô tả ngắn**: 2-3 câu mô tả sản phẩm
-- **Lợi ích**: Mỗi dòng 1 lợi ích
-- **Ngôn ngữ**: Chọn ngôn ngữ đầu ra cho landing page
-
-### Bước 3: Nhập landing page mẫu
-**Cách 1 — Nhập URL** (tự động):
-- Dán link landing page mẫu vào ô URL
-
-**Cách 2 — Dán HTML** (tin cậy hơn):
-1. Mở trang mẫu trong trình duyệt
-2. Nhấn `Ctrl+U` (View Source)
-3. `Ctrl+A` → `Ctrl+C` (copy toàn bộ)
-4. Dán vào ô **"HOẶC dán HTML trực tiếp"**
-
-### Bước 4: Tạo Landing Page
-Nhấn **"Tạo Landing Page"** → Chờ 10-30 giây
-
-### Bước 5: Tùy chỉnh & Xuất
-- Xem trước trên nhiều thiết bị (iPhone, iPad, Desktop...)
-- Chỉnh sửa inline (nhấn nút "Chỉnh sửa")
-- Copy HTML cho Webcake hoặc tải file HTML
-
-## 🛠️ Tính năng nâng cao
-
-### Custom Prompt
-Viết yêu cầu trong ô **"✨ Hướng dẫn tùy chỉnh"** để Gemini điều chỉnh:
-- "Đổi màu nền thành gradient xanh đậm"
-- "Thêm section FAQ ở cuối"
-- "Làm nút CTA to hơn, bo tròn"
-
-### Custom Form Fields
-Thêm trường tùy chỉnh vào form đăng ký:
-- Text, Số điện thoại, Email, Textarea, Dropdown
-- Đặt placeholder và bắt buộc/tùy chọn
-
-### Tracking
-- **Google Sheet Webhook**: Gửi data form về Google Sheet
-- **Facebook Pixel**: Theo dõi conversion
-- **TikTok Pixel**: Theo dõi TikTok Ads
-- **Google Ads**: Tracking code tùy chỉnh
-
-## 📁 Cấu trúc dự án
-
-```
-├── src/
-│   ├── App.jsx              # Layout chính
-│   ├── main.jsx             # Entry point
-│   ├── index.css            # Theme & styles
-│   ├── components/
-│   │   ├── ConfigForm.jsx   # Form cấu hình sidebar
-│   │   ├── PreviewPanel.jsx # Preview với device presets
-│   │   ├── HtmlEditor.jsx   # Inline editor
-│   │   ├── ImageUploader.jsx # Upload ảnh sản phẩm
-│   │   └── ExportButtons.jsx # Nút xuất/tải
-│   └── lib/
-│       ├── gemini.js        # Gemini API & clone logic
-│       ├── generator.js     # Pipeline sinh landing page
-│       └── templates/       # Template fallback
-├── install_and_run.bat      # 1-click Windows
-├── start.sh                 # 1-click Mac/Linux
-├── vite.config.js           # Vite + proxy config
-└── package.json
+**Cập nhật bản mới:**
+```powershell
+cd 3K-LDP
+git pull origin main
+npm install
+npm run dev
 ```
 
-## ❓ FAQ
+---
 
-**Q: Có cần trả phí Gemini API không?**
-A: Không, Gemini API có tier miễn phí đủ dùng.
+### 🍎 macOS
 
-**Q: Landing page clone có giống 100% trang gốc không?**
-A: Layout/CSS/JS giữ 100%. Nội dung text được dịch sang ngôn ngữ bạn chọn. Kết quả ~90-95% giống trang gốc.
+```bash
+# 1. Cài Node.js (nếu chưa có)
+brew install node
 
-**Q: Trang mẫu bị chặn khi nhập URL?**
-A: Dùng cách 2 — dán HTML trực tiếp (Ctrl+U → copy → paste).
+# 2. Clone repo (lần đầu)
+git clone https://github.com/kei3k/3K-LDP.git
+cd 3K-LDP
 
-## 📄 License
+# 3. Cài dependencies
+npm install
 
-MIT License — Tự do sử dụng và chỉnh sửa.
+# 4. Chạy
+npm run dev
+```
+
+**Cập nhật bản mới:**
+```bash
+cd 3K-LDP
+git pull origin main
+npm install
+npm run dev
+```
+
+> **Lưu ý macOS:** Nếu gặp lỗi `permission denied`, chạy: `sudo chown -R $USER 3K-LDP`
+
+---
+
+## 🎯 Cách sử dụng
+
+### Tab 1: 📦 Template PKE
+
+1. **Upload file .PKE** từ Webcake
+2. **Dán HTML trang 1688** (Ctrl+U / Cmd+U → copy) hoặc nhập link 1688
+3. Bấm **"Bắt đầu tạo LDP mới"** → 4 bước wizard:
+   - **Trích xuất**: Xem/sửa data sản phẩm mới
+   - **Ảnh**: Re-host & preview ảnh cũ → mới
+   - **Text**: Đọc bản dịch Việt, chỉnh bản ngôn ngữ đích
+   - **Xuất**: Tải file PKE mới
+4. **Import file .PKE** vào Webcake — mọi element vẫn editable ✨
+
+### Tab 2: 🌐 Dịch ảnh SP
+
+1. **Kéo thả ảnh** hoặc dán URL ảnh từ 1688
+2. **Chọn ngôn ngữ đích** (Thai, Việt, Anh, Trung, Nhật, Hàn...)
+3. **Chọn model AI** (Nano Banana 2 hoặc Nano Banana Pro)
+4. Bấm **"Dịch X ảnh"** → Gemini dịch text trên ảnh
+5. **Tải về** hoặc **Upload ImgBB + copy URL** để dùng trong template
+
+---
+
+## ⚙️ Cấu hình
+
+Khi mở app, nhập **Gemini API Key** ở phần **Cài đặt API** trong sidebar.
+Key được lưu trong localStorage, chỉ cần nhập 1 lần.
+
+---
+
+## 📌 Lưu ý quan trọng
+
+- **Tracking code** (Facebook Pixel, Google Ads, TikTok, GTM) giữ nguyên theo template
+- **Footer & thanh sticky** CTA không bị thay ảnh
+- **ImgBB** sử dụng 4 API key xoay vòng, delay 1.5s giữa mỗi upload
+- Ảnh từ **alicdn.com** tự động qua proxy với Referer header
