@@ -1,12 +1,15 @@
 /**
- * TemplateWizard — 4-step wizard for template PKE replacement
+ * TemplateWizard — 6-step wizard for template PKE replacement
  * 
  * Step 0: Extract → Decode PKE + fetch 1688 data
  * Step 1: Images → Re-host images, preview replacements
- * Step 2: Text → AI text replacement, editable
- * Step 3: Export → Download final PKE
+ * Step 2: Translate Images → Select images with text → Gemini translates → update PKE
+ * Step 3: Text → AI text replacement, editable
+ * Step 4: Preview → Full page render
+ * Step 5: Export → Download final PKE
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export default function TemplateWizard({
   step,
@@ -18,8 +21,11 @@ export default function TemplateWizard({
   isLoading,
   progress,
   error,
+  language,           // target language from config
+  apiKey,             // Gemini API key
   onUpdateProduct,    // edit product data
   onProceedImages,    // start image replacement
+  onTranslateImages,  // translate selected images and update PKE
   onProceedText,      // start text replacement
   onUpdateTextItem,   // edit individual text
   onUpdateImage,      // update individual image replacement
@@ -27,9 +33,10 @@ export default function TemplateWizard({
 }) {
   const steps = [
     { label: '📦 Trích xuất', desc: 'Đọc template + lấy data 1688' },
-    { label: '🖼️ Ảnh', desc: 'Re-host và thay ảnh sản phẩm' },
+    { label: '🖼️ Ảnh', desc: 'Re-host và thay ảnh SP' },
+    { label: '🌐 Dịch ảnh', desc: 'Dịch text trên ảnh SP' },
     { label: '📝 Text', desc: 'Dịch và thay nội dung' },
-    { label: '👁️ Preview', desc: 'Xem lại toàn bộ thay đổi' },
+    { label: '👁️ Preview', desc: 'Xem lại thay đổi' },
     { label: '💾 Xuất', desc: 'Tải file PKE mới' },
   ];
 
@@ -88,14 +95,28 @@ export default function TemplateWizard({
         <Step1Images
           imageReplacements={imageReplacements}
           isLoading={isLoading}
-          onProceed={onProceedText}
+          onProceed={onTranslateImages ? () => {} : onProceedText}
           onUpdateImage={onUpdateImage}
+          hasTranslateStep={!!onTranslateImages}
+          onProceedToTranslate={onTranslateImages}
         />
       )}
 
-      {/* Step 2: Text */}
+      {/* Step 2: Translate Images */}
       {step === 2 && (
-        <Step2Text
+        <Step2TranslateImages
+          imageReplacements={imageReplacements}
+          language={language}
+          apiKey={apiKey}
+          isLoading={isLoading}
+          onUpdateImage={onUpdateImage}
+          onProceed={onProceedText}
+        />
+      )}
+
+      {/* Step 3: Text */}
+      {step === 3 && (
+        <Step3Text
           textReplacements={textReplacements}
           isLoading={isLoading}
           onUpdateItem={onUpdateTextItem}
@@ -103,17 +124,17 @@ export default function TemplateWizard({
         />
       )}
 
-      {/* Step 3: Preview — full page render */}
-      {(step === 2 && previewReady) || step === 3 ? (
-        <Step3Preview
+      {/* Step 4: Preview — full page render */}
+      {(step === 3 && previewReady) || step === 4 ? (
+        <Step4Preview
           pkeData={pkeData}
           onExport={onExport}
         />
       ) : null}
 
-      {/* Step 4: Export */}
-      {step === 4 && (
-        <Step4Export />
+      {/* Step 5: Export */}
+      {step === 5 && (
+        <Step5Export />
       )}
     </div>
   );
@@ -210,14 +231,12 @@ function Step0Extract({ templateInfo, productData, onUpdateProduct, onProceed, i
   );
 }
 
-function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage }) {
+function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage, hasTranslateStep, onProceedToTranslate }) {
   const [editingIdx, setEditingIdx] = useState(null);
   const [urlInput, setUrlInput] = useState('');
-  const fileInputRef = useCallback((node) => { if (node) node._ref = node; }, []);
 
   const handleFileSelect = (idx, file) => {
     const url = URL.createObjectURL(file);
-    // Also upload to ImgBB in background
     const reader = new FileReader();
     reader.onload = async () => {
       const base64 = reader.result.split(',')[1];
@@ -233,7 +252,6 @@ function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage })
           return;
         }
       } catch {}
-      // Fallback to blob URL
       onUpdateImage?.(idx, url);
     };
     reader.readAsDataURL(file);
@@ -258,23 +276,13 @@ function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage })
             {imageReplacements.map((item, i) => (
               <div key={i} className="rounded-lg bg-muted/30 overflow-hidden">
                 <div className="flex items-center gap-2 p-2">
-                  {/* Old image */}
                   <div className="flex-shrink-0 text-center">
-                    <img
-                      src={item.oldSrc}
-                      className="w-14 h-14 object-cover rounded border border-border opacity-50"
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
+                    <img src={item.oldSrc} className="w-14 h-14 object-cover rounded border border-border opacity-50" onError={(e) => e.target.style.display = 'none'} />
                     <div className="text-[8px] text-muted-foreground mt-0.5">Cũ</div>
                   </div>
                   <div className="text-sm text-muted-foreground">→</div>
-                  {/* New image — clickable */}
                   <div className="flex-shrink-0 text-center cursor-pointer group" onClick={() => setEditingIdx(editingIdx === i ? null : i)}>
-                    <img
-                      src={item.newSrc}
-                      className="w-14 h-14 object-cover rounded border-2 border-primary group-hover:border-violet-400 transition-colors"
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
+                    <img src={item.newSrc} className="w-14 h-14 object-cover rounded border-2 border-primary group-hover:border-violet-400 transition-colors" onError={(e) => e.target.style.display = 'none'} />
                     <div className="text-[8px] text-primary mt-0.5">📷 Bấm đổi</div>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -282,27 +290,15 @@ function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage })
                     <p className="text-[9px] text-muted-foreground">{item.blockType} • {item.width}x{item.height}</p>
                   </div>
                 </div>
-                {/* Inline editor */}
                 {editingIdx === i && (
                   <div className="p-2 pt-0 space-y-1.5 border-t border-border/30">
                     <div className="flex gap-1">
-                      <input
-                        type="url"
-                        value={urlInput}
-                        onChange={e => setUrlInput(e.target.value)}
-                        placeholder="Dán URL ảnh (ảnh đã dịch từ ImgBB...)"
-                        className="form-input flex-1 text-[10px] py-1"
-                        onKeyDown={e => e.key === 'Enter' && handleUrlSubmit(i)}
-                      />
-                      <button onClick={() => handleUrlSubmit(i)} disabled={!urlInput.trim()}
-                        className="px-2 py-1 bg-primary/10 text-primary rounded text-[10px] hover:bg-primary/20 disabled:opacity-30">
-                        ✔️
-                      </button>
+                      <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Dán URL ảnh..." className="form-input flex-1 text-[10px] py-1" onKeyDown={e => e.key === 'Enter' && handleUrlSubmit(i)} />
+                      <button onClick={() => handleUrlSubmit(i)} disabled={!urlInput.trim()} className="px-2 py-1 bg-primary/10 text-primary rounded text-[10px] hover:bg-primary/20 disabled:opacity-30">✔️</button>
                     </div>
                     <label className="flex items-center gap-1 px-2 py-1 bg-violet-500/10 text-violet-400 rounded text-[10px] cursor-pointer hover:bg-violet-500/20 justify-center">
                       📁 Hoặc chọn file ảnh
-                      <input type="file" accept="image/*" className="hidden"
-                        onChange={e => e.target.files[0] && handleFileSelect(i, e.target.files[0])} />
+                      <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files[0] && handleFileSelect(i, e.target.files[0])} />
                     </label>
                   </div>
                 )}
@@ -316,17 +312,285 @@ function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage })
 
       {!isLoading && imageReplacements?.length > 0 && (
         <button
-          onClick={onProceed}
-          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
+          onClick={hasTranslateStep ? onProceedToTranslate : onProceed}
+          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
         >
-          📝 Bước tiếp: Dịch và thay text →
+          {hasTranslateStep ? '🌐 Bước tiếp: Dịch text trên ảnh →' : '📝 Bước tiếp: Dịch và thay text →'}
         </button>
       )}
     </div>
   );
 }
 
-function Step2Text({ textReplacements, isLoading, onUpdateItem, onProceed }) {
+/**
+ * Step2TranslateImages — Select images with text → Gemini translates → upload ImgBB → update PKE
+ * Reuses the same Gemini Image API as ImageTranslator tab
+ */
+function Step2TranslateImages({ imageReplacements, language, apiKey, isLoading, onUpdateImage, onProceed }) {
+  const [selected, setSelected] = useState(() => {
+    // Default: select images > 200x200 (likely product infographic images with text)
+    return new Set(
+      (imageReplacements || []).map((item, i) => 
+        (item.width > 200 && item.height > 200) ? i : null
+      ).filter(i => i !== null)
+    );
+  });
+  const [translating, setTranslating] = useState(false);
+  const [translateProgress, setTranslateProgress] = useState('');
+  const [results, setResults] = useState({}); // {index: 'done'|'error'|'processing'}
+  const [imageModel, setImageModel] = useState('gemini-3.1-flash-image-preview');
+
+  const imageModels = [
+    { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
+    { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (Nano Banana Pro)' },
+  ];
+
+  const toggleSelect = (i) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelected(new Set((imageReplacements || []).map((_, i) => i)));
+  const selectNone = () => setSelected(new Set());
+
+  // Core translate function — same as ImageTranslator.jsx
+  const translateImage = async (imageUrl, targetLang, modelId) => {
+    // Fetch the image first
+    const needsProxy = imageUrl.includes('alicdn.com') || imageUrl.includes('1688.com') || imageUrl.includes('cbu0');
+    const fetchUrl = needsProxy ? `/api/fetch-url?url=${encodeURIComponent(imageUrl)}` : imageUrl;
+    
+    const imgResp = await fetch(fetchUrl, { signal: AbortSignal.timeout(15000) });
+    if (!imgResp.ok) throw new Error(`Fetch image failed: ${imgResp.status}`);
+    const blob = await imgResp.blob();
+    const mimeType = blob.type || 'image/jpeg';
+    
+    // Convert to base64
+    const base64 = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+
+    const prompt = `You are an expert image editor. Translate ALL text visible in this image to ${targetLang}. 
+
+RULES:
+1. KEEP the exact same design, layout, colors, fonts style, and visual elements
+2. ONLY change the text — translate every piece of text to ${targetLang}
+3. Maintain text positioning, size, and alignment
+4. If there are product names, translate them naturally
+5. Keep numbers, measurements, and model numbers as-is
+6. Make the translated text look natural and professional
+7. Preserve all non-text elements (images, icons, decorations, product photos)
+
+Output the edited image with all text translated to ${targetLang}.`;
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64 } }
+            ]
+          }],
+          generationConfig: {
+            responseModalities: ['IMAGE', 'TEXT'],
+            temperature: 0.4,
+          }
+        })
+      }
+    );
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(`Gemini API error ${resp.status}: ${errData.error?.message || resp.statusText}`);
+    }
+
+    const data = await resp.json();
+    const candidate = data.candidates?.[0];
+    if (!candidate) throw new Error('No response from Gemini');
+    
+    for (const part of candidate.content?.parts || []) {
+      if (part.inlineData) {
+        return {
+          base64: part.inlineData.data,
+          mimeType: part.inlineData.mimeType || 'image/png',
+        };
+      }
+    }
+    throw new Error('No image in Gemini response');
+  };
+
+  // Upload translated image to ImgBB
+  const uploadToImgBB = async (base64) => {
+    const KEYS = ['02f64b3be9d269a7a8a41f3778dadc00','b69da15baaeef837d4a3a389d9d93057','99c7dcfd7b3f726700a39ae75032c773','c82284897280ed2e46a1f3e5be11238b'];
+    const key = KEYS[Math.floor(Math.random() * KEYS.length)];
+    const fd = new FormData();
+    fd.append('key', key);
+    fd.append('image', base64);
+    const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd, signal: AbortSignal.timeout(15000) });
+    const data = await res.json();
+    if (data.success) return data.data.url;
+    throw new Error('ImgBB upload failed: ' + JSON.stringify(data.error));
+  };
+
+  // Translate all selected images
+  const handleTranslateSelected = async () => {
+    if (!apiKey) { alert('Cần Gemini API Key!'); return; }
+    const indices = [...selected].sort((a, b) => a - b);
+    if (indices.length === 0) return;
+
+    setTranslating(true);
+    const newResults = { ...results };
+
+    for (let j = 0; j < indices.length; j++) {
+      const i = indices[j];
+      const item = imageReplacements[i];
+      setTranslateProgress(`🌐 Đang dịch ảnh ${j + 1}/${indices.length}: ${item.blockName}...`);
+      newResults[i] = 'processing';
+      setResults({ ...newResults });
+
+      try {
+        // Translate via Gemini
+        const result = await translateImage(item.newSrc, language, imageModel);
+        
+        // Upload to ImgBB
+        setTranslateProgress(`📤 Upload ảnh đã dịch ${j + 1}/${indices.length}...`);
+        const newUrl = await uploadToImgBB(result.base64);
+        
+        // Update the PKE image replacement
+        onUpdateImage(i, newUrl);
+        newResults[i] = 'done';
+        setResults({ ...newResults });
+      } catch (err) {
+        console.error(`[TranslateImage] Error translating image ${i}:`, err);
+        newResults[i] = 'error';
+        setResults({ ...newResults });
+        
+        // Rate limit handling
+        if (err.message?.includes('429') || err.message?.includes('Resource')) {
+          setTranslateProgress(`⏳ Rate limit, đợi 15s...`);
+          await new Promise(r => setTimeout(r, 15000));
+        }
+      }
+
+      // Delay between images
+      if (j < indices.length - 1) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+
+    const doneCount = Object.values(newResults).filter(v => v === 'done').length;
+    const errCount = Object.values(newResults).filter(v => v === 'error').length;
+    setTranslateProgress(`✅ Đã dịch ${doneCount} ảnh${errCount > 0 ? ` (${errCount} lỗi)` : ''}`);
+    setTranslating(false);
+  };
+
+  const selectedCount = selected.size;
+  const doneCount = Object.values(results).filter(v => v === 'done').length;
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 rounded-xl bg-card border border-border">
+        <h3 className="font-bold text-sm mb-1 text-primary">🌐 Dịch text trên ảnh sản phẩm</h3>
+        <p className="text-[10px] text-muted-foreground mb-3">
+          Chọn ảnh có text cần dịch sang <b>{language}</b>. Gemini AI sẽ giữ nguyên thiết kế, chỉ dịch text.
+        </p>
+
+        {/* Model selector */}
+        <div className="mb-3">
+          <label className="text-[10px] font-medium text-muted-foreground mb-1 block">🤖 Model dịch ảnh</label>
+          <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="form-input text-xs">
+            {imageModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+
+        {/* Select all / none */}
+        <div className="flex gap-2 mb-3">
+          <button onClick={selectAll} className="px-2 py-1 bg-primary/10 text-primary rounded text-[10px] hover:bg-primary/20">✅ Chọn tất cả</button>
+          <button onClick={selectNone} className="px-2 py-1 bg-muted text-muted-foreground rounded text-[10px] hover:bg-muted/80">❌ Bỏ chọn</button>
+          <span className="text-[10px] text-muted-foreground self-center ml-auto">{selectedCount}/{imageReplacements?.length || 0} đã chọn</span>
+        </div>
+
+        {/* Image grid with checkboxes */}
+        <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+          {(imageReplacements || []).map((item, i) => (
+            <div key={i} className={`rounded-lg overflow-hidden transition-all ${
+              selected.has(i) ? 'bg-violet-500/10 border border-violet-500/30' : 'bg-muted/30 border border-transparent'
+            }`}>
+              <div className="flex items-center gap-2 p-2 cursor-pointer" onClick={() => toggleSelect(i)}>
+                {/* Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selected.has(i)}
+                  onChange={() => toggleSelect(i)}
+                  className="w-4 h-4 rounded accent-violet-500 flex-shrink-0"
+                  onClick={e => e.stopPropagation()}
+                />
+                {/* Image preview */}
+                <img src={item.newSrc} className="w-16 h-16 object-cover rounded border border-border flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-foreground truncate font-medium">{item.blockName}</p>
+                  <p className="text-[9px] text-muted-foreground">{item.width}x{item.height}</p>
+                  {/* Status badge */}
+                  {results[i] === 'done' && <span className="text-[9px] text-green-400">✅ Đã dịch</span>}
+                  {results[i] === 'processing' && <span className="text-[9px] text-violet-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Đang dịch...</span>}
+                  {results[i] === 'error' && <span className="text-[9px] text-red-400">❌ Lỗi</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Progress */}
+      {translateProgress && (
+        <div className="p-3 rounded-xl bg-card border border-border">
+          {translating && (
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2">
+              <div className="h-full bg-violet-500 animate-pulse rounded-full" style={{ width: '70%' }} />
+            </div>
+          )}
+          <p className="text-sm text-violet-500">{translateProgress}</p>
+        </div>
+      )}
+
+      {/* Translate button */}
+      {selectedCount > 0 && !translating && (
+        <button
+          onClick={handleTranslateSelected}
+          disabled={!apiKey}
+          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+        >
+          🌐 Dịch {selectedCount} ảnh sang {language}
+        </button>
+      )}
+
+      {/* Skip / Proceed button */}
+      {!translating && (
+        <button
+          onClick={onProceed}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+            doneCount > 0
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          {doneCount > 0 ? `📝 Bước tiếp: Dịch text (${doneCount} ảnh đã dịch) →` : '⏭️ Bỏ qua, không dịch ảnh →'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Step3Text({ textReplacements, isLoading, onUpdateItem, onProceed }) {
   const [filter, setFilter] = useState('all');
   
   const filtered = textReplacements?.filter(t => {
@@ -537,13 +801,12 @@ function buildPreviewHtml(pkeData) {
   return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0f0;width:${W}px;margin:0 auto;}img{display:block;}</style></head><body>${html}</body></html>`;
 }
 
-function Step3Preview({ pkeData, onExport }) {
+function Step4Preview({ pkeData, onExport }) {
   const [showPreview, setShowPreview] = useState(false);
   const previewHtml = pkeData ? buildPreviewHtml(pkeData) : '';
 
   return (
     <div className="space-y-4 mt-4">
-      {/* Open preview button */}
       <button
         onClick={() => setShowPreview(true)}
         className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
@@ -551,32 +814,20 @@ function Step3Preview({ pkeData, onExport }) {
         👁️ Mở Preview toàn trang
       </button>
 
-      {/* Full-screen overlay preview */}
       {showPreview && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
-          {/* Header bar */}
           <div className="flex items-center justify-between px-4 py-2 bg-card border-b border-border flex-shrink-0">
             <h3 className="font-bold text-sm text-primary">👁️ Preview Landing Page (Mobile 420px)</h3>
-            <button onClick={() => setShowPreview(false)}
-              className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/20">
-              ✖ Đóng
-            </button>
+            <button onClick={() => setShowPreview(false)} className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/20">✖ Đóng</button>
           </div>
-          {/* Preview iframe - centered */}
           <div className="flex-1 flex justify-center overflow-auto p-4">
             <div style={{ width: 420, flexShrink: 0, borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.5)', border: '2px solid #444', background: '#f5f5f5' }}>
-              <iframe
-                srcDoc={previewHtml}
-                title="Preview"
-                style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
-                sandbox="allow-same-origin allow-scripts"
-              />
+              <iframe srcDoc={previewHtml} title="Preview" style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }} sandbox="allow-same-origin allow-scripts" />
             </div>
           </div>
         </div>
       )}
 
-      {/* Export button */}
       <button
         onClick={onExport}
         className="w-full py-3.5 rounded-xl font-bold text-base bg-gradient-to-r from-green-500 to-emerald-400 text-white shadow-lg shadow-green-500/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
@@ -587,17 +838,13 @@ function Step3Preview({ pkeData, onExport }) {
   );
 }
 
-function Step4Export() {
+function Step5Export() {
   return (
     <div className="p-6 rounded-xl bg-card border border-border text-center">
       <div className="text-4xl mb-4">✅</div>
       <h3 className="font-bold text-lg text-primary mb-2">Hoàn tất!</h3>
-      <p className="text-sm text-muted-foreground">
-        File PKE mới đã được tải về. Import vào Webcake để xem kết quả.
-      </p>
-      <p className="text-xs text-muted-foreground mt-2">
-        Tất cả element vẫn editable trong Webcake.
-      </p>
+      <p className="text-sm text-muted-foreground">File PKE mới đã được tải về. Import vào Webcake để xem kết quả.</p>
+      <p className="text-xs text-muted-foreground mt-2">Tất cả element vẫn editable trong Webcake.</p>
     </div>
   );
 }

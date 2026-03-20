@@ -429,9 +429,14 @@ export default function App() {
     }
   }, [templateProduct, templateFlatBlocks]);
 
-  /** Step 2: Text replacement via Gemini */
-  const handleTemplateProceedText = useCallback(async () => {
+  /** Step 2: Show translate images step */
+  const handleTemplateTranslateImages = useCallback(() => {
     setTemplateWizardStep(2);
+  }, []);
+
+  /** Step 3: Text replacement via Gemini */
+  const handleTemplateProceedText = useCallback(async () => {
+    setTemplateWizardStep(3);
     setIsLoading(true);
     setError(null);
 
@@ -640,7 +645,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
       a.click();
       URL.revokeObjectURL(url);
 
-      setTemplateWizardStep(4);
+      setTemplateWizardStep(5);
       setProgress('✅ File PKE đã tải về!');
       setTimeout(() => setProgress(''), 5000);
     } catch (err) {
@@ -881,8 +886,11 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
               isLoading={isLoading}
               progress={progress}
               error={error}
+              language={config.language || 'Tiếng Việt'}
+              apiKey={config.apiKey}
               onUpdateProduct={setTemplateProduct}
               onProceedImages={handleTemplateProceedImages}
+              onTranslateImages={handleTemplateTranslateImages}
               onProceedText={handleTemplateProceedText}
               onUpdateTextItem={handleTemplateUpdateText}
               onUpdateImage={handleTemplateUpdateImage}
