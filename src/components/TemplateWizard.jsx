@@ -534,7 +534,7 @@ Output the edited image with all text translated to ${targetLang}.`;
                   onClick={e => e.stopPropagation()}
                 />
                 {/* Image preview */}
-                <img src={item.newSrc} className="w-16 h-16 object-cover rounded border border-border flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
+                <img src={item.newSrc} className="w-48 h-48 object-cover rounded-lg border border-border flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-foreground truncate font-medium">{item.blockName}</p>
