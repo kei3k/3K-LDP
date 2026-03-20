@@ -338,10 +338,12 @@ function Step2TranslateImages({ imageReplacements, language, apiKey, isLoading, 
   const [translating, setTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState('');
   const [results, setResults] = useState({}); // {index: {status: 'done'|'error'|'processing', error?: string}}
-  const [imageModel, setImageModel] = useState('gemini-3.1-flash-image-preview');
+  const [imageModel, setImageModel] = useState('gemini-2.5-flash-preview-image-generation');
   const [errorLog, setErrorLog] = useState([]); // [{index, blockName, error, time}]
+  const cancelRef = useRef(false);
 
   const imageModels = [
+    { value: 'gemini-2.5-flash-preview-image-generation', label: 'Gemini 2.5 Flash Preview Image (Nano Banana)' },
     { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
     { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (Nano Banana Pro)' },
   ];
@@ -475,22 +477,30 @@ Output the edited image with all text translated to ${targetLang}.`;
   };
 
   // Translate all selected images
+  const handleStop = () => {
+    cancelRef.current = true;
+    setTranslateProgress('⏹️ Đã dừng. Có thể đổi model rồi dịch tiếp.');
+    setTranslating(false);
+  };
+
   const handleTranslateSelected = async () => {
     if (!apiKey) { alert('Cần Gemini API Key!'); return; }
     const indices = [...selected].sort((a, b) => a - b);
     if (indices.length === 0) return;
 
+    cancelRef.current = false;
     setTranslating(true);
     const newResults = { ...results };
 
     for (let j = 0; j < indices.length; j++) {
       const i = indices[j];
+      if (cancelRef.current) break;
       if (newResults[i]?.status === 'done') continue; // skip already done
       const item = imageReplacements[i];
       setTranslateProgress(`🌐 Đang dịch ảnh ${j + 1}/${indices.length}: ${item.blockName}...`);
       await translateSingleImage(i, item, newResults);
 
-      if (j < indices.length - 1) {
+      if (j < indices.length - 1 && !cancelRef.current) {
         await new Promise(r => setTimeout(r, 3000));
       }
     }
@@ -526,9 +536,10 @@ Output the edited image with all text translated to ${targetLang}.`;
     for (let j = 0; j < failedIndices.length; j++) {
       const i = failedIndices[j];
       const item = imageReplacements[i];
+      if (cancelRef.current) break;
       setTranslateProgress(`🔄 Thử lại ${j + 1}/${failedIndices.length}: ${item.blockName}...`);
       await translateSingleImage(i, item, newResults);
-      if (j < failedIndices.length - 1) {
+      if (j < failedIndices.length - 1 && !cancelRef.current) {
         await new Promise(r => setTimeout(r, 3000));
       }
     }
@@ -615,7 +626,12 @@ Output the edited image with all text translated to ${targetLang}.`;
               <div className="h-full bg-violet-500 animate-pulse rounded-full" style={{ width: '70%' }} />
             </div>
           )}
-          <p className="text-sm text-violet-500">{translateProgress}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-violet-500">{translateProgress}</p>
+            {translating && (
+              <button onClick={handleStop} className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/20 flex-shrink-0">⏹️ Dừng</button>
+            )}
+          </div>
         </div>
       )}
 
