@@ -2,57 +2,78 @@
 
 Công cụ tạo Landing Page từ Template PKE Webcake & dịch ảnh sản phẩm bằng AI.
 
-## ⚡ Cài đặt nhanh
+---
 
-### Yêu cầu
-- **Node.js** phiên bản 18 trở lên — [Tải tại đây](https://nodejs.org/)
-- **Git** — [Tải tại đây](https://git-scm.com/)
-- **Gemini API Key** — [Lấy miễn phí tại AI Studio](https://aistudio.google.com/apikey)
+## 📋 Phiên bản
+
+| Tag | Ngày | Nội dung |
+|-----|------|----------|
+| **v2.1** | 2026-03-20 | Fix preview layout, PKE export cải thiện, gitignore update |
+| **v2.0** | 2026-03-18 | Template PKE Wizard 4 bước + Image Translator |
+| **v1.0** | 2026-03-12 | LDP Generator đầu tiên — Clone & Localize Landing Pages với Gemini AI |
 
 ---
+
+## ⚡ Cài đặt mới (lần đầu)
+
+### Yêu cầu
+- **Node.js** phiên bản 18+ — [Tải tại đây](https://nodejs.org/)
+- **Git** — [Tải tại đây](https://git-scm.com/)
+- **Gemini API Key** — [Lấy miễn phí tại AI Studio](https://aistudio.google.com/apikey)
 
 ### 🪟 Windows
 
 ```powershell
-# 1. Clone repo (lần đầu)
+# 1. Clone repo
 git clone https://github.com/kei3k/3K-LDP.git
+
+# 2. Vào thư mục
 cd 3K-LDP
 
-# 2. Cài dependencies
+# 3. Cài dependencies
 npm install
 
-# 3. Chạy
+# 4. Chạy tool
 npm run dev
 ```
 
-**Cập nhật bản mới:**
-```powershell
-cd 3K-LDP
-git pull origin main
-npm install
-npm run dev
-```
+> Hoặc **click đúp** file `install_and_run.bat` để tự động cài + chạy.
 
----
-
-### 🍎 macOS
+### 🍎 macOS / Linux
 
 ```bash
 # 1. Cài Node.js (nếu chưa có)
-brew install node
+brew install node         # macOS
+# sudo apt install nodejs npm   # Ubuntu/Debian
 
-# 2. Clone repo (lần đầu)
+# 2. Clone repo
 git clone https://github.com/kei3k/3K-LDP.git
 cd 3K-LDP
 
 # 3. Cài dependencies
 npm install
 
-# 4. Chạy
+# 4. Chạy tool
 npm run dev
 ```
 
-**Cập nhật bản mới:**
+> **macOS:** Nếu gặp lỗi `permission denied`, chạy: `sudo chown -R $USER 3K-LDP`
+
+---
+
+## 🔄 Cập nhật lên bản mới
+
+### 🪟 Windows
+
+```powershell
+cd 3K-LDP
+git pull origin main
+npm install
+npm run dev
+```
+
+### 🍎 macOS / Linux
+
 ```bash
 cd 3K-LDP
 git pull origin main
@@ -60,7 +81,20 @@ npm install
 npm run dev
 ```
 
-> **Lưu ý macOS:** Nếu gặp lỗi `permission denied`, chạy: `sudo chown -R $USER 3K-LDP`
+> **Lưu ý:** `npm install` chỉ cần khi có thay đổi dependencies. Nếu `git pull` chỉ báo sửa code, có thể bỏ qua bước này.
+
+### Quay về phiên bản cũ
+
+```bash
+# Xem danh sách phiên bản
+git tag --list
+
+# Chuyển về phiên bản cụ thể (ví dụ v2.0)
+git checkout v2.0
+
+# Quay lại bản mới nhất
+git checkout main
+```
 
 ---
 
