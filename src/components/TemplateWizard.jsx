@@ -337,8 +337,9 @@ function Step2TranslateImages({ imageReplacements, language, apiKey, isLoading, 
   });
   const [translating, setTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState('');
-  const [results, setResults] = useState({}); // {index: 'done'|'error'|'processing'}
+  const [results, setResults] = useState({}); // {index: {status: 'done'|'error'|'processing', error?: string}}
   const [imageModel, setImageModel] = useState('gemini-3.1-flash-image-preview');
+  const [errorLog, setErrorLog] = useState([]); // [{index, blockName, error, time}]
 
   const imageModels = [
     { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
@@ -440,6 +441,39 @@ Output the edited image with all text translated to ${targetLang}.`;
     throw new Error('ImgBB upload failed: ' + JSON.stringify(data.error));
   };
 
+  // Translate a single image (used for both batch and retry)
+  const translateSingleImage = async (i, item, newResults) => {
+    newResults[i] = { status: 'processing' };
+    setResults({ ...newResults });
+
+    try {
+      const result = await translateImage(item.newSrc, language, imageModel);
+      setTranslateProgress(`📤 Upload ảnh đã dịch: ${item.blockName}...`);
+      const newUrl = await uploadToImgBB(result.base64);
+      onUpdateImage(i, newUrl);
+      newResults[i] = { status: 'done' };
+      setResults({ ...newResults });
+      return true;
+    } catch (err) {
+      const errMsg = err.message || String(err);
+      console.error(`[TranslateImage] Error image ${i}:`, err);
+      newResults[i] = { status: 'error', error: errMsg };
+      setResults({ ...newResults });
+      setErrorLog(prev => [...prev, {
+        index: i,
+        blockName: item.blockName,
+        error: errMsg,
+        time: new Date().toLocaleTimeString(),
+      }]);
+
+      if (errMsg.includes('429') || errMsg.includes('Resource')) {
+        setTranslateProgress(`⏳ Rate limit, đợi 15s...`);
+        await new Promise(r => setTimeout(r, 15000));
+      }
+      return false;
+    }
+  };
+
   // Translate all selected images
   const handleTranslateSelected = async () => {
     if (!apiKey) { alert('Cần Gemini API Key!'); return; }
@@ -451,49 +485,62 @@ Output the edited image with all text translated to ${targetLang}.`;
 
     for (let j = 0; j < indices.length; j++) {
       const i = indices[j];
+      if (newResults[i]?.status === 'done') continue; // skip already done
       const item = imageReplacements[i];
       setTranslateProgress(`🌐 Đang dịch ảnh ${j + 1}/${indices.length}: ${item.blockName}...`);
-      newResults[i] = 'processing';
-      setResults({ ...newResults });
+      await translateSingleImage(i, item, newResults);
 
-      try {
-        // Translate via Gemini
-        const result = await translateImage(item.newSrc, language, imageModel);
-        
-        // Upload to ImgBB
-        setTranslateProgress(`📤 Upload ảnh đã dịch ${j + 1}/${indices.length}...`);
-        const newUrl = await uploadToImgBB(result.base64);
-        
-        // Update the PKE image replacement
-        onUpdateImage(i, newUrl);
-        newResults[i] = 'done';
-        setResults({ ...newResults });
-      } catch (err) {
-        console.error(`[TranslateImage] Error translating image ${i}:`, err);
-        newResults[i] = 'error';
-        setResults({ ...newResults });
-        
-        // Rate limit handling
-        if (err.message?.includes('429') || err.message?.includes('Resource')) {
-          setTranslateProgress(`⏳ Rate limit, đợi 15s...`);
-          await new Promise(r => setTimeout(r, 15000));
-        }
-      }
-
-      // Delay between images
       if (j < indices.length - 1) {
         await new Promise(r => setTimeout(r, 3000));
       }
     }
 
-    const doneCount = Object.values(newResults).filter(v => v === 'done').length;
-    const errCount = Object.values(newResults).filter(v => v === 'error').length;
-    setTranslateProgress(`✅ Đã dịch ${doneCount} ảnh${errCount > 0 ? ` (${errCount} lỗi)` : ''}`);
+    const doneCount = Object.values(newResults).filter(v => v.status === 'done').length;
+    const errCount = Object.values(newResults).filter(v => v.status === 'error').length;
+    setTranslateProgress(`✅ Đã dịch ${doneCount} ảnh${errCount > 0 ? ` (${errCount} lỗi — bấm 🔄 để thử lại)` : ''}`);
+    setTranslating(false);
+  };
+
+  // Retry a single failed image
+  const handleRetrySingle = async (i) => {
+    const item = imageReplacements[i];
+    setTranslating(true);
+    setTranslateProgress(`🔄 Thử lại: ${item.blockName}...`);
+    const newResults = { ...results };
+    await translateSingleImage(i, item, newResults);
+    const status = newResults[i]?.status;
+    setTranslateProgress(status === 'done' ? `✅ Đã dịch lại: ${item.blockName}` : `❌ Vẫn lỗi: ${item.blockName}`);
+    setTranslating(false);
+  };
+
+  // Retry all failed images
+  const handleRetryAllFailed = async () => {
+    const failedIndices = Object.entries(results)
+      .filter(([_, v]) => v.status === 'error')
+      .map(([k]) => parseInt(k))
+      .sort((a, b) => a - b);
+    if (failedIndices.length === 0) return;
+
+    setTranslating(true);
+    const newResults = { ...results };
+    for (let j = 0; j < failedIndices.length; j++) {
+      const i = failedIndices[j];
+      const item = imageReplacements[i];
+      setTranslateProgress(`🔄 Thử lại ${j + 1}/${failedIndices.length}: ${item.blockName}...`);
+      await translateSingleImage(i, item, newResults);
+      if (j < failedIndices.length - 1) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+    const doneCount = Object.values(newResults).filter(v => v.status === 'done').length;
+    const errCount = Object.values(newResults).filter(v => v.status === 'error').length;
+    setTranslateProgress(`✅ Đã dịch ${doneCount} ảnh${errCount > 0 ? ` (${errCount} vẫn lỗi)` : ''}`);
     setTranslating(false);
   };
 
   const selectedCount = selected.size;
-  const doneCount = Object.values(results).filter(v => v === 'done').length;
+  const doneCount = Object.values(results).filter(v => v.status === 'done').length;
+  const errCount = Object.values(results).filter(v => v.status === 'error').length;
 
   return (
     <div className="space-y-4">
@@ -540,9 +587,19 @@ Output the edited image with all text translated to ${targetLang}.`;
                   <p className="text-[10px] text-foreground truncate font-medium">{item.blockName}</p>
                   <p className="text-[9px] text-muted-foreground">{item.width}x{item.height}</p>
                   {/* Status badge */}
-                  {results[i] === 'done' && <span className="text-[9px] text-green-400">✅ Đã dịch</span>}
-                  {results[i] === 'processing' && <span className="text-[9px] text-violet-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Đang dịch...</span>}
-                  {results[i] === 'error' && <span className="text-[9px] text-red-400">❌ Lỗi</span>}
+                  {results[i]?.status === 'done' && <span className="text-[9px] text-green-400">✅ Đã dịch</span>}
+                  {results[i]?.status === 'processing' && <span className="text-[9px] text-violet-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Đang dịch...</span>}
+                  {results[i]?.status === 'error' && (
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] text-red-400">❌ {results[i].error?.substring(0, 80)}</span>
+                      {!translating && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRetrySingle(i); }}
+                          className="block px-2 py-0.5 bg-orange-500/10 text-orange-400 rounded text-[9px] hover:bg-orange-500/20 font-medium"
+                        >🔄 Thử lại</button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -562,6 +619,23 @@ Output the edited image with all text translated to ${targetLang}.`;
         </div>
       )}
 
+      {/* Error log panel */}
+      {errorLog.length > 0 && (
+        <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-bold text-red-400">📋 Log lỗi ({errorLog.length})</h4>
+            <button onClick={() => setErrorLog([])} className="text-[9px] text-muted-foreground hover:text-foreground">Xóa log</button>
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {errorLog.map((log, li) => (
+              <div key={li} className="text-[10px] text-red-300/80 bg-red-500/5 rounded px-2 py-1">
+                <span className="text-muted-foreground">[{log.time}]</span> <b>{log.blockName}</b>: {log.error}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Translate button */}
       {selectedCount > 0 && !translating && (
         <button
@@ -570,6 +644,16 @@ Output the edited image with all text translated to ${targetLang}.`;
           className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
         >
           🌐 Dịch {selectedCount} ảnh sang {language}
+        </button>
+      )}
+
+      {/* Retry all failed button */}
+      {errCount > 0 && !translating && (
+        <button
+          onClick={handleRetryAllFailed}
+          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+        >
+          🔄 Thử lại {errCount} ảnh bị lỗi
         </button>
       )}
 
