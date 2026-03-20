@@ -330,7 +330,13 @@ export default function App() {
       }
 
       for (const { block } of templateFlatBlocks) {
-        if (block.type !== 'image-block' || !block.specials?.src) continue;
+        // Include BOTH image-block AND rectangle/other blocks that have specials.src
+        // Webcake uses 'rectangle' blocks for carousel images too!
+        if (!block.specials?.src) continue;
+        const blockType = block.type || '';
+        // Only process blocks that can hold images
+        if (blockType !== 'image-block' && blockType !== 'rectangle') continue;
+        
         const w = block.responsive?.desktop?.styles?.width || 0;
         const h = block.responsive?.desktop?.styles?.height || 0;
         
@@ -340,7 +346,9 @@ export default function App() {
           continue;
         }
         
-        if (w > 150 && h > 150 && w * h > 30000) {
+        // Lower threshold to include feedback images (120x140), carousel icons (27x27 still skipped)
+        // Minimum: 80px on each side, area > 8000px²
+        if (w > 80 && h > 80 && w * h > 8000) {
           const oldSrc = block.specials.src;
           const newSrc = finalImages[imgIdx % finalImages.length];
           
@@ -366,15 +374,53 @@ export default function App() {
           
           replacements.push({
             blockName: block.properties?.name || `image-${imgIdx}`,
+            blockType, // log the type for debugging
             oldSrc, newSrc, width: w, height: h,
+          });
+          imgIdx++;
+        } else {
+          console.log(`[TemplateWizard] SKIP small: ${block.properties?.name} type:${blockType} (${w}x${h}=${w*h})`);
+        }
+      }
+
+      // Also replace gallery/carousel images (stored in specials.media[])
+      for (const { block } of templateFlatBlocks) {
+        if (block.type !== 'gallery' || !block.specials?.media) continue;
+        
+        // Skip protected blocks
+        if (block.id && protectedBlockIds.has(block.id)) {
+          console.log(`[TemplateWizard] SKIP protected gallery: ${block.properties?.name}`);
+          continue;
+        }
+        
+        const media = block.specials.media;
+        console.log(`[TemplateWizard] Gallery "${block.properties?.name}" with ${media.length} slides`);
+        
+        for (let mi = 0; mi < media.length; mi++) {
+          const item = media[mi];
+          if (item.type !== 'image') continue;
+          
+          const newSrc = finalImages[imgIdx % finalImages.length];
+          const oldSrc = item.originLink || item.link || '';
+          
+          // Replace all URL fields in the media item
+          if (item.originLink) item.originLink = newSrc;
+          if (item.link) item.link = newSrc;
+          if (item.src) item.src = newSrc;
+          if (item.thumbnail) item.thumbnail = newSrc;
+          
+          replacements.push({
+            blockName: `${block.properties?.name || 'gallery'}_slide_${mi}`,
+            blockType: 'gallery-slide',
+            oldSrc, newSrc, width: 420, height: 480,
           });
           imgIdx++;
         }
       }
 
       setTemplateImageReplacements(replacements);
-      setProgress(`✅ Đã thay ${replacements.length} ảnh`);
-      console.log(`[TemplateWizard] Replaced ${replacements.length} images`);
+      setProgress(`✅ Đã thay ${replacements.length} ảnh (gồm gallery)`);
+      console.log(`[TemplateWizard] Replaced ${replacements.length} images total`);
     } catch (err) {
       setError(err.message);
       setProgress('');
@@ -506,6 +552,52 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
     ));
   }, []);
 
+  /** Update a single image replacement */
+  const handleTemplateUpdateImage = useCallback((replacementIdx, newUrl) => {
+    setTemplateImageReplacements(prev => {
+      const updated = [...prev];
+      if (updated[replacementIdx]) {
+        const item = updated[replacementIdx];
+        item.newSrc = newUrl;
+        
+        // Also update the actual PKE block data
+        if (item.blockType === 'gallery-slide') {
+          // Gallery slide: find the gallery block and update the media item
+          for (const { block } of templateFlatBlocks) {
+            if (block.type === 'gallery' && block.specials?.media) {
+              const slideMatch = item.blockName.match(/_slide_(\d+)$/);
+              if (slideMatch) {
+                const slideIdx = parseInt(slideMatch[1]);
+                const mediaItem = block.specials.media[slideIdx];
+                if (mediaItem) {
+                  if (mediaItem.originLink) mediaItem.originLink = newUrl;
+                  if (mediaItem.link) mediaItem.link = newUrl;
+                }
+              }
+            }
+          }
+        } else {
+          // Regular image-block or rectangle
+          for (const { block } of templateFlatBlocks) {
+            if (block.specials?.src === item.oldSrc || block.specials?.src === prev[replacementIdx]?.newSrc) {
+              block.specials.src = newUrl;
+              if (block.responsive?.desktop?.styles?.background) {
+                block.responsive.desktop.styles.background = 
+                  block.responsive.desktop.styles.background.replace(/url\([^)]+\)/g, `url(${newUrl})`);
+              }
+              if (block.responsive?.mobile?.styles?.background) {
+                block.responsive.mobile.styles.background = 
+                  block.responsive.mobile.styles.background.replace(/url\([^)]+\)/g, `url(${newUrl})`);
+              }
+              break;
+            }
+          }
+        }
+      }
+      return updated;
+    });
+  }, [templateFlatBlocks]);
+
   /** Step 3: Apply text + encode + download PKE */
   const handleTemplateExport = useCallback(() => {
     try {
@@ -548,7 +640,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
       a.click();
       URL.revokeObjectURL(url);
 
-      setTemplateWizardStep(3);
+      setTemplateWizardStep(4);
       setProgress('✅ File PKE đã tải về!');
       setTimeout(() => setProgress(''), 5000);
     } catch (err) {
@@ -783,6 +875,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
               step={templateWizardStep}
               productData={templateProduct}
               templateInfo={templateInfo}
+              pkeData={templatePkeData}
               imageReplacements={templateImageReplacements}
               textReplacements={templateTextReplacements}
               isLoading={isLoading}
@@ -792,6 +885,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
               onProceedImages={handleTemplateProceedImages}
               onProceedText={handleTemplateProceedText}
               onUpdateTextItem={handleTemplateUpdateText}
+              onUpdateImage={handleTemplateUpdateImage}
               onExport={handleTemplateExport}
             />
           )}

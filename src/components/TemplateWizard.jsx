@@ -12,6 +12,7 @@ export default function TemplateWizard({
   step,
   productData,        // extracted product data from 1688
   templateInfo,       // decoded PKE info
+  pkeData,            // full decoded PKE data for preview rendering
   imageReplacements,  // [{blockName, oldSrc, newSrc, width, height}]
   textReplacements,   // [{index, type, oldText, newText}]
   isLoading,
@@ -21,14 +22,18 @@ export default function TemplateWizard({
   onProceedImages,    // start image replacement
   onProceedText,      // start text replacement
   onUpdateTextItem,   // edit individual text
+  onUpdateImage,      // update individual image replacement
   onExport,           // encode + download PKE
 }) {
   const steps = [
     { label: '📦 Trích xuất', desc: 'Đọc template + lấy data 1688' },
     { label: '🖼️ Ảnh', desc: 'Re-host và thay ảnh sản phẩm' },
     { label: '📝 Text', desc: 'Dịch và thay nội dung' },
-    { label: '💾 Xuất', desc: 'Tạo file PKE mới' },
+    { label: '👁️ Preview', desc: 'Xem lại toàn bộ thay đổi' },
+    { label: '💾 Xuất', desc: 'Tải file PKE mới' },
   ];
+
+  const [previewReady, setPreviewReady] = useState(false);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
@@ -84,6 +89,7 @@ export default function TemplateWizard({
           imageReplacements={imageReplacements}
           isLoading={isLoading}
           onProceed={onProceedText}
+          onUpdateImage={onUpdateImage}
         />
       )}
 
@@ -93,13 +99,21 @@ export default function TemplateWizard({
           textReplacements={textReplacements}
           isLoading={isLoading}
           onUpdateItem={onUpdateTextItem}
-          onProceed={onExport}
+          onProceed={() => setPreviewReady(true)}
         />
       )}
 
-      {/* Step 3: Export */}
-      {step === 3 && (
-        <Step3Export />
+      {/* Step 3: Preview — full page render */}
+      {(step === 2 && previewReady) || step === 3 ? (
+        <Step3Preview
+          pkeData={pkeData}
+          onExport={onExport}
+        />
+      ) : null}
+
+      {/* Step 4: Export */}
+      {step === 4 && (
+        <Step4Export />
       )}
     </div>
   );
@@ -196,36 +210,102 @@ function Step0Extract({ templateInfo, productData, onUpdateProduct, onProceed, i
   );
 }
 
-function Step1Images({ imageReplacements, isLoading, onProceed }) {
+function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage }) {
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [urlInput, setUrlInput] = useState('');
+  const fileInputRef = useCallback((node) => { if (node) node._ref = node; }, []);
+
+  const handleFileSelect = (idx, file) => {
+    const url = URL.createObjectURL(file);
+    // Also upload to ImgBB in background
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+      const KEYS = ['02f64b3be9d269a7a8a41f3778dadc00','b69da15baaeef837d4a3a389d9d93057','99c7dcfd7b3f726700a39ae75032c773'];
+      const fd = new FormData();
+      fd.append('key', KEYS[Math.floor(Math.random() * KEYS.length)]);
+      fd.append('image', base64);
+      try {
+        const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+          onUpdateImage?.(idx, data.data.url);
+          return;
+        }
+      } catch {}
+      // Fallback to blob URL
+      onUpdateImage?.(idx, url);
+    };
+    reader.readAsDataURL(file);
+    setEditingIdx(null);
+  };
+
+  const handleUrlSubmit = (idx) => {
+    if (!urlInput.trim()) return;
+    onUpdateImage?.(idx, urlInput.trim());
+    setUrlInput('');
+    setEditingIdx(null);
+  };
+
   return (
     <div className="space-y-4">
       <div className="p-4 rounded-xl bg-card border border-border">
-        <h3 className="font-bold text-sm mb-3 text-primary">🖼️ Thay thế ảnh ({imageReplacements?.length || 0} ảnh)</h3>
+        <h3 className="font-bold text-sm mb-1 text-primary">🖼️ Thay thế ảnh ({imageReplacements?.length || 0} ảnh)</h3>
+        <p className="text-[10px] text-muted-foreground mb-3">💡 Bấm vào ảnh mới (ảnh xanh) để thay bằng ảnh đã dịch hoặc ảnh khác</p>
         
         {imageReplacements?.length > 0 ? (
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto">
             {imageReplacements.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
-                <div className="flex-shrink-0 text-center">
-                  <img
-                    src={item.oldSrc}
-                    className="w-12 h-12 object-cover rounded border border-border"
-                    onError={(e) => e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="16" font-size="12">❌</text></svg>'}
-                  />
-                  <div className="text-[9px] text-muted-foreground mt-0.5">{item.width}x{item.height}</div>
+              <div key={i} className="rounded-lg bg-muted/30 overflow-hidden">
+                <div className="flex items-center gap-2 p-2">
+                  {/* Old image */}
+                  <div className="flex-shrink-0 text-center">
+                    <img
+                      src={item.oldSrc}
+                      className="w-14 h-14 object-cover rounded border border-border opacity-50"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                    <div className="text-[8px] text-muted-foreground mt-0.5">Cũ</div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">→</div>
+                  {/* New image — clickable */}
+                  <div className="flex-shrink-0 text-center cursor-pointer group" onClick={() => setEditingIdx(editingIdx === i ? null : i)}>
+                    <img
+                      src={item.newSrc}
+                      className="w-14 h-14 object-cover rounded border-2 border-primary group-hover:border-violet-400 transition-colors"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                    <div className="text-[8px] text-primary mt-0.5">📷 Bấm đổi</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-muted-foreground truncate">{item.blockName}</p>
+                    <p className="text-[9px] text-muted-foreground">{item.blockType} • {item.width}x{item.height}</p>
+                  </div>
                 </div>
-                <div className="text-lg">→</div>
-                <div className="flex-shrink-0 text-center">
-                  <img
-                    src={item.newSrc}
-                    className="w-12 h-12 object-cover rounded border-2 border-primary"
-                    onError={(e) => e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="16" font-size="12">⏳</text></svg>'}
-                  />
-                  <div className="text-[9px] text-primary mt-0.5">New</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">{item.blockName}</p>
-                </div>
+                {/* Inline editor */}
+                {editingIdx === i && (
+                  <div className="p-2 pt-0 space-y-1.5 border-t border-border/30">
+                    <div className="flex gap-1">
+                      <input
+                        type="url"
+                        value={urlInput}
+                        onChange={e => setUrlInput(e.target.value)}
+                        placeholder="Dán URL ảnh (ảnh đã dịch từ ImgBB...)"
+                        className="form-input flex-1 text-[10px] py-1"
+                        onKeyDown={e => e.key === 'Enter' && handleUrlSubmit(i)}
+                      />
+                      <button onClick={() => handleUrlSubmit(i)} disabled={!urlInput.trim()}
+                        className="px-2 py-1 bg-primary/10 text-primary rounded text-[10px] hover:bg-primary/20 disabled:opacity-30">
+                        ✔️
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-1 px-2 py-1 bg-violet-500/10 text-violet-400 rounded text-[10px] cursor-pointer hover:bg-violet-500/20 justify-center">
+                      📁 Hoặc chọn file ảnh
+                      <input type="file" accept="image/*" className="hidden"
+                        onChange={e => e.target.files[0] && handleFileSelect(i, e.target.files[0])} />
+                    </label>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -327,16 +407,187 @@ function Step2Text({ textReplacements, isLoading, onUpdateItem, onProceed }) {
       {!isLoading && textReplacements?.length > 0 && (
         <button
           onClick={onProceed}
-          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-green-500 to-emerald-400 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
+          className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
         >
-          💾 Xuất file PKE mới →
+          👁️ Preview trước khi xuất →
         </button>
       )}
     </div>
   );
 }
 
-function Step3Export() {
+function buildPreviewHtml(pkeData) {
+  if (!pkeData?.source?.page) return '<p>No data</p>';
+  const sections = pkeData.source.page;
+  const W = 420; // mobile width
+  let html = '';
+
+  // Get mobile style (fallback to desktop)
+  function ms(block, prop) {
+    return block.responsive?.mobile?.styles?.[prop] ?? block.responsive?.desktop?.styles?.[prop];
+  }
+
+  function renderBlock(block, isChild) {
+    const type = block.type || '';
+    const top = ms(block, 'top');
+    const left = ms(block, 'left');
+    const w = ms(block, 'width');
+    const h = ms(block, 'height');
+    const bg = ms(block, 'background') || '';
+    const borderRadius = ms(block, 'borderRadius') || 0;
+    const opacity = ms(block, 'opacity') ?? 1;
+    
+    // Position style for absolutely positioned blocks
+    let posStyle = 'position:absolute;';
+    if (typeof top === 'number') posStyle += `top:${top}px;`;
+    if (typeof left === 'number') posStyle += `left:${left}px;`;
+    if (typeof w === 'number') posStyle += `width:${w}px;`;
+    if (typeof h === 'number') posStyle += `height:${h}px;`;
+    if (borderRadius) posStyle += `border-radius:${borderRadius}px;`;
+    if (opacity < 1) posStyle += `opacity:${opacity};`;
+    if (bg && !bg.includes('url(')) posStyle += `background:${bg};`;
+
+    // IMAGE BLOCK
+    if (type === 'image-block' && block.specials?.src) {
+      const imgW = typeof w === 'number' ? w : 420;
+      return `<img src="${block.specials.src}" style="${posStyle}object-fit:cover;max-width:100%;" />`;
+    }
+    
+    // RECTANGLE with image
+    if (type === 'rectangle' && block.specials?.src) {
+      return `<img src="${block.specials.src}" style="${posStyle}object-fit:cover;" />`;
+    }
+    
+    // RECTANGLE without image (just bg shape)
+    if (type === 'rectangle' && !block.specials?.src) {
+      if (bg) return `<div style="${posStyle}"></div>`;
+      return '';
+    }
+
+    // GALLERY / CAROUSEL
+    if (type === 'gallery' && block.specials?.media) {
+      const slides = block.specials.media.filter(m => m.type === 'image');
+      if (slides.length === 0) return '';
+      const id = 'g' + Math.random().toString(36).substr(2, 6);
+      const gW = typeof w === 'number' ? w : W;
+      const gH = typeof h === 'number' ? h : gW;
+      let g = `<div style="${posStyle}overflow:hidden;">`;
+      // Main slide area
+      slides.forEach((s, si) => {
+        const src = s.originLink || s.link || '';
+        g += `<img class="${id}-s" src="${src}" style="width:100%;height:${gH - 60}px;object-fit:cover;display:${si === 0 ? 'block' : 'none'};" />`;
+      });
+      // Thumbnail strip
+      g += `<div style="display:flex;gap:3px;padding:4px;height:56px;align-items:center;background:rgba(255,255,255,0.9);">`;
+      slides.forEach((s, si) => {
+        const src = s.originLink || s.link || '';
+        g += `<img onclick="document.querySelectorAll('.${id}-s').forEach((e,j)=>e.style.display=j===${si}?'block':'none');this.parentNode.querySelectorAll('img').forEach((e,j)=>e.style.border=j===${si}?'2px solid #f60':'1px solid #ddd')" src="${src}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer;border:${si === 0 ? '2px solid #f60' : '1px solid #ddd'};flex-shrink:0;" />`;
+      });
+      g += `</div></div>`;
+      return g;
+    }
+
+    // TEXT BLOCK
+    if (type === 'text-block' && block.specials?.text) {
+      const fontSize = ms(block, 'fontSize') || 13;
+      const color = ms(block, 'color') || '#333';
+      const fontWeight = ms(block, 'fontWeight') || 'normal';
+      const textAlign = ms(block, 'textAlign') || 'left';
+      return `<div style="${posStyle}font-size:${fontSize}px;line-height:1.4;color:${color};font-weight:${fontWeight};text-align:${textAlign};overflow:hidden;">${block.specials.text}</div>`;
+    }
+
+    // BUTTON
+    if (type === 'button' && block.specials?.text) {
+      const btnBg = bg || '#e65100';
+      const color = ms(block, 'color') || '#fff';
+      return `<div style="${posStyle}background:${btnBg};color:${color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;">${block.specials.text}</div>`;
+    }
+
+    // COUNTDOWN (placeholder)
+    if (type === 'countdown') {
+      return `<div style="${posStyle}background:#222;color:#ff0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border-radius:4px;">00:00:00</div>`;
+    }
+
+    // GROUP — positioned container with children
+    if (type === 'group' && block.children?.length > 0) {
+      let inner = block.children.map(c => renderBlock(c, true)).join('');
+      return `<div style="${posStyle}overflow:hidden;">${inner}</div>`;
+    }
+
+    // SECTION — skip (handled at top level)
+    // LINE — decorative
+    if (type === 'line') {
+      return `<div style="${posStyle}border-top:1px solid #ddd;"></div>`;
+    }
+
+    return '';
+  }
+
+  sections.forEach(sec => {
+    const pos = ms(sec, 'position') || '';
+    if (pos === 'sticky' || pos === 'fixed') return; // skip footer/sticky bars in preview
+    
+    const secH = sec.responsive?.mobile?.styles?.height || sec.responsive?.desktop?.styles?.height || 400;
+    const secBg = ms(sec, 'background') || '#fff';
+    
+    let content = (sec.children || []).map(b => renderBlock(b, false)).join('');
+    html += `<div style="position:relative;width:${W}px;height:${secH}px;background:${secBg};overflow:hidden;">${content}</div>`;
+  });
+
+  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0f0;width:${W}px;margin:0 auto;}img{display:block;}</style></head><body>${html}</body></html>`;
+}
+
+function Step3Preview({ pkeData, onExport }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const previewHtml = pkeData ? buildPreviewHtml(pkeData) : '';
+
+  return (
+    <div className="space-y-4 mt-4">
+      {/* Open preview button */}
+      <button
+        onClick={() => setShowPreview(true)}
+        className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+      >
+        👁️ Mở Preview toàn trang
+      </button>
+
+      {/* Full-screen overlay preview */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
+          {/* Header bar */}
+          <div className="flex items-center justify-between px-4 py-2 bg-card border-b border-border flex-shrink-0">
+            <h3 className="font-bold text-sm text-primary">👁️ Preview Landing Page (Mobile 420px)</h3>
+            <button onClick={() => setShowPreview(false)}
+              className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/20">
+              ✖ Đóng
+            </button>
+          </div>
+          {/* Preview iframe - centered */}
+          <div className="flex-1 flex justify-center overflow-auto p-4">
+            <div style={{ width: 420, flexShrink: 0, borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.5)', border: '2px solid #444', background: '#f5f5f5' }}>
+              <iframe
+                srcDoc={previewHtml}
+                title="Preview"
+                style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
+                sandbox="allow-same-origin allow-scripts"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export button */}
+      <button
+        onClick={onExport}
+        className="w-full py-3.5 rounded-xl font-bold text-base bg-gradient-to-r from-green-500 to-emerald-400 text-white shadow-lg shadow-green-500/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+      >
+        💾 Xuất file PKE mới
+      </button>
+    </div>
+  );
+}
+
+function Step4Export() {
   return (
     <div className="p-6 rounded-xl bg-card border border-border text-center">
       <div className="text-4xl mb-4">✅</div>

@@ -88,18 +88,21 @@ export async function applyReplacements(pkeData, classMap, flatBlocks, newProduc
   let imageReplaceCount = 0;
   if (finalImages.length > 0) {
     for (const { block } of flatBlocks) {
-      if (block.type !== 'image-block' || !block.specials?.src) continue;
+      // Include image-block AND rectangle (carousel images use rectangle type)
+      if (!block.specials?.src) continue;
+      const blockType = block.type || '';
+      if (blockType !== 'image-block' && blockType !== 'rectangle') continue;
       
       const desktop = block.responsive?.desktop?.styles || {};
       const w = desktop.width || 0;
       const h = desktop.height || 0;
       const area = w * h;
       
-      // Replace ALL images larger than 150x150 (product images, review images, gallery)
-      // Keep small icons (<100px) and tiny decorations
-      if (w > 150 && h > 150 && area > 30000) {
+      // Replace images larger than 80x80 (includes feedback 120x140, carousel, gallery)
+      // Skip small icons (<80px) and tiny decorations
+      if (w > 80 && h > 80 && area > 8000) {
         const idx = imageReplaceCount % finalImages.length;
-        console.log(`[Replacer] Image ${block.properties?.name} (${w}x${h}) → ${finalImages[idx].substring(0, 50)}`);
+        console.log(`[Replacer] Image ${block.properties?.name} type:${blockType} (${w}x${h}) → ${finalImages[idx].substring(0, 50)}`);
         
         // CRITICAL: Update ALL 3 places where Webcake stores image URLs
         block.specials.src = finalImages[idx];
@@ -123,8 +126,25 @@ export async function applyReplacements(pkeData, classMap, flatBlocks, newProduc
         imageReplaceCount++;
       }
     }
+    
+    // Also replace gallery/carousel images
+    for (const { block } of flatBlocks) {
+      if (block.type !== 'gallery' || !block.specials?.media) continue;
+      const media = block.specials.media;
+      for (let mi = 0; mi < media.length; mi++) {
+        const item = media[mi];
+        if (item.type !== 'image') continue;
+        const idx = imageReplaceCount % finalImages.length;
+        console.log(`[Replacer] Gallery slide ${mi} → ${finalImages[idx].substring(0, 50)}`);
+        if (item.originLink) item.originLink = finalImages[idx];
+        if (item.link) item.link = finalImages[idx];
+        if (item.src) item.src = finalImages[idx];
+        if (item.thumbnail) item.thumbnail = finalImages[idx];
+        imageReplaceCount++;
+      }
+    }
   }
-  console.log(`[Replacer] Replaced ${imageReplaceCount} large images`);
+  console.log(`[Replacer] Replaced ${imageReplaceCount} images (incl gallery)`);
 
   // ===== STEP 3: Collect ALL text that needs translation/replacement =====
   onProgress?.('📝 Thu thập text cần thay...');

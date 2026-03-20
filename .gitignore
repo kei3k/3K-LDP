@@ -28,3 +28,8 @@ npm-debug.log*
 # Cache
 .eslintcache
 .cache/
+
+# User data / test files
+*.pke
+*.html
+!index.html
