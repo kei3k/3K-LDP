@@ -13,12 +13,12 @@ import { Upload, Globe, Loader2, Download, Trash2, Plus, Languages, ImageIcon, R
 export default function ImageTranslator({ apiKey, model }) {
   const [images, setImages] = useState([]); // [{id, file, preview, status, result}]
   const [targetLang, setTargetLang] = useState('ภาษาไทย');
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash-preview-image-generation');
+  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash-image-preview');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState('');
 
   const imageModels = [
-    { value: 'gemini-2.5-flash-preview-image-generation', label: 'Gemini 2.5 Flash Preview Image (Nano Banana)' },
+    { value: 'gemini-2.5-flash-image-preview', label: 'Gemini 2.5 Flash Preview Image (Nano Banana)' },
     { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
     { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (Nano Banana Pro)' },
   ];
