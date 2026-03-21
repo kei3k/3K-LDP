@@ -338,12 +338,12 @@ function Step2TranslateImages({ imageReplacements, language, apiKey, isLoading, 
   const [translating, setTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState('');
   const [results, setResults] = useState({}); // {index: {status: 'done'|'error'|'processing', error?: string}}
-  const [imageModel, setImageModel] = useState('gemini-2.5-flash-image-preview');
+  const [imageModel, setImageModel] = useState('gemini-2.5-flash-image');
   const [errorLog, setErrorLog] = useState([]); // [{index, blockName, error, time}]
   const cancelRef = useRef(false);
 
   const imageModels = [
-    { value: 'gemini-2.5-flash-image-preview', label: 'Gemini 2.5 Flash Preview Image (Nano Banana)' },
+    { value: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Preview Image (Nano Banana)' },
     { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
     { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (Nano Banana Pro)' },
   ];
