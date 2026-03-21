@@ -128,6 +128,7 @@ export default function TemplateWizard({
       {(step === 3 && previewReady) || step === 4 ? (
         <Step4Preview
           pkeData={pkeData}
+          textReplacements={textReplacements}
           onExport={onExport}
         />
       ) : null}
@@ -780,11 +781,21 @@ function Step3Text({ textReplacements, isLoading, onUpdateItem, onProceed }) {
   );
 }
 
-function buildPreviewHtml(pkeData) {
+function buildPreviewHtml(pkeData, textReplacements) {
   if (!pkeData?.source?.page) return '<p>No data</p>';
   const sections = pkeData.source.page;
   const W = 420; // mobile width
   let html = '';
+
+  // Build a lookup map: block reference -> newText
+  const textMap = new Map();
+  if (textReplacements?.length) {
+    for (const item of textReplacements) {
+      if (item.block && item.newText) {
+        textMap.set(item.block, item.newText);
+      }
+    }
+  }
 
   // Get mobile style (fallback to desktop)
   function ms(block, prop) {
@@ -857,14 +868,27 @@ function buildPreviewHtml(pkeData) {
       const color = ms(block, 'color') || '#333';
       const fontWeight = ms(block, 'fontWeight') || 'normal';
       const textAlign = ms(block, 'textAlign') || 'left';
-      return `<div style="${posStyle}font-size:${fontSize}px;line-height:1.4;color:${color};font-weight:${fontWeight};text-align:${textAlign};overflow:hidden;">${block.specials.text}</div>`;
+      // Use translated text if available
+      let displayText = block.specials.text;
+      if (textMap.has(block)) {
+        const newText = textMap.get(block);
+        const oldHtml = block.specials.text;
+        if (oldHtml.includes('<')) {
+          const match = oldHtml.match(/^(<[^>]+>)([\s\S]*)(<\/[^>]+>)$/);
+          displayText = match ? `${match[1]}${newText}${match[3]}` : newText;
+        } else {
+          displayText = newText;
+        }
+      }
+      return `<div style="${posStyle}font-size:${fontSize}px;line-height:1.4;color:${color};font-weight:${fontWeight};text-align:${textAlign};overflow:hidden;">${displayText}</div>`;
     }
 
     // BUTTON
     if (type === 'button' && block.specials?.text) {
       const btnBg = bg || '#e65100';
       const color = ms(block, 'color') || '#fff';
-      return `<div style="${posStyle}background:${btnBg};color:${color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;">${block.specials.text}</div>`;
+      const btnText = textMap.has(block) ? textMap.get(block) : block.specials.text;
+      return `<div style="${posStyle}background:${btnBg};color:${color};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;cursor:pointer;">${btnText}</div>`;
     }
 
     // COUNTDOWN (placeholder)
@@ -901,9 +925,9 @@ function buildPreviewHtml(pkeData) {
   return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0f0;width:${W}px;margin:0 auto;}img{display:block;}</style></head><body>${html}</body></html>`;
 }
 
-function Step4Preview({ pkeData, onExport }) {
+function Step4Preview({ pkeData, textReplacements, onExport }) {
   const [showPreview, setShowPreview] = useState(false);
-  const previewHtml = pkeData ? buildPreviewHtml(pkeData) : '';
+  const previewHtml = pkeData ? buildPreviewHtml(pkeData, textReplacements) : '';
 
   return (
     <div className="space-y-4 mt-4">
