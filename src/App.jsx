@@ -405,6 +405,7 @@ export default function App() {
           }
           
           replacements.push({
+            blockId: block.id,
             blockName: block.properties?.name || `image-${imgIdx}`,
             blockType, // log the type for debugging
             oldSrc, newSrc, width: w, height: h,
@@ -442,6 +443,7 @@ export default function App() {
           if (item.thumbnail) item.thumbnail = newSrc;
           
           replacements.push({
+            blockId: block.id,
             blockName: `${block.properties?.name || 'gallery'}_slide_${mi}`,
             blockType: 'gallery-slide',
             oldSrc, newSrc, width: 420, height: 480,
@@ -494,7 +496,7 @@ export default function App() {
       const model = config.model || 'gemini-2.0-flash';
       const allItems = textItems.map(t => ({ idx: t.index, type: t.type, text: t.oldText.substring(0, 200) }));
 
-      // If target language is Vietnamese, single translation. Otherwise, dual translation.
+      // ... prompts content omitted here, fetching directly using templateFlatBlocks ...
       const prompt = isVietnamese
         ? `Bạn là chuyên gia dịch thuật và marketing. DỊCH và THAY THẾ toàn bộ nội dung landing page sang Tiếng Việt cho sản phẩm mới.
 
@@ -565,10 +567,8 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
       setTemplateTextReplacements(replacements);
       setProgress(`✅ Đã dịch ${items.length} đoạn sang ${lang}`);
     } catch (err) {
-      // Even if text fails, show what we have
       setError(`Lỗi dịch text: ${err.message}. Bạn vẫn có thể xuất PKE với ảnh mới.`);
       setProgress('');
-      // Set empty text replacements so export button still shows
       const textItems = [];
       for (const { block, index } of templateFlatBlocks) {
         if (block.type === 'text-block' && block.specials?.text) {
@@ -597,11 +597,10 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
         const item = updated[replacementIdx];
         item.newSrc = newUrl;
         
-        // Also update the actual PKE block data
+        // Also update the actual PKE block data using specific block.id
         if (item.blockType === 'gallery-slide') {
-          // Gallery slide: find the gallery block and update the media item
           for (const { block } of templateFlatBlocks) {
-            if (block.type === 'gallery' && block.specials?.media) {
+            if (block.id === item.blockId && block.specials?.media) {
               const slideMatch = item.blockName.match(/_slide_(\d+)$/);
               if (slideMatch) {
                 const slideIdx = parseInt(slideMatch[1]);
@@ -609,6 +608,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
                 if (mediaItem) {
                   if (mediaItem.originLink) mediaItem.originLink = newUrl;
                   if (mediaItem.link) mediaItem.link = newUrl;
+                  if (mediaItem.src) mediaItem.src = newUrl;
                 }
               }
             }
@@ -616,7 +616,12 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
         } else {
           // Regular image-block or rectangle
           for (const { block } of templateFlatBlocks) {
-            if (block.specials?.src === item.oldSrc || block.specials?.src === prev[replacementIdx]?.newSrc) {
+            // Match exactly by block.id if it exists, otherwise fallback to matching by src
+            const matched = item.blockId && block.id 
+              ? block.id === item.blockId 
+              : (block.specials?.src === item.oldSrc || block.specials?.src === prev[replacementIdx]?.newSrc);
+
+            if (matched) {
               block.specials.src = newUrl;
               if (block.responsive?.desktop?.styles?.background) {
                 block.responsive.desktop.styles.background = 

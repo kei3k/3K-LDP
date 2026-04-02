@@ -458,9 +458,12 @@ Output the edited image with all text translated to ${targetLang}.`;
       
       if (translateCache[cacheKey]) {
         console.log(`[Translate] ⚡ CACHE HIT for: ${item.newSrc.substring(0, 30)}...`);
+        setTranslateProgress(`⚡ Lấy nhanh từ Cache: ${item.blockName}`);
         onUpdateImage(i, translateCache[cacheKey]);
         newResults[i] = { status: 'done' };
         setResults({ ...newResults });
+        // Wait briefly so user can see it in UI
+        await new Promise(r => setTimeout(r, 400));
         return true;
       }
 
@@ -582,12 +585,26 @@ Output the edited image with all text translated to ${targetLang}.`;
           Chọn ảnh có text cần dịch sang <b>{language}</b>. Gemini AI sẽ giữ nguyên thiết kế, chỉ dịch text.
         </p>
 
-        {/* Model selector */}
-        <div className="mb-3">
-          <label className="text-[10px] font-medium text-muted-foreground mb-1 block">🤖 Model dịch ảnh</label>
-          <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="form-input text-xs">
-            {imageModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
+        {/* Model selector & Clear Cache */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex-1">
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">🤖 Model dịch ảnh</label>
+            <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="form-input text-xs w-full">
+              {imageModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+          <button 
+            title="Xóa cache ảnh dịch nếu tool lấy nhầm ảnh gốc"
+            onClick={() => {
+              if (window.confirm('Bạn có chắc chắn muốn xóa Cache ảnh dịch không? Sẽ phải tốn API để dịch lại từ đầu.')) {
+                localStorage.removeItem('3k_translate_cache');
+                alert('Đã xóa Cache thành công! Lần dịch tới sẽ gọi API lại từ đầu.');
+              }
+            }} 
+            className="mt-4 px-3 py-2 bg-red-500/10 text-red-500 rounded-lg text-xs hover:bg-red-500/20 active:scale-95 transition-all flex items-center justify-center font-medium"
+          >
+            🗑️ Xóa Cache
+          </button>
         </div>
 
         {/* Select all / none */}
@@ -716,11 +733,22 @@ Output the edited image with all text translated to ${targetLang}.`;
             onClick={() => {
               if (cleanUntranslated && doneCount > 0) {
                 const translatedUrls = [];
-                for (let i = 0; i < imageReplacements.length; i++) {
-                  if (results[i]?.status === 'done') {
-                    translatedUrls.push(imageReplacements[i].newSrc);
-                  }
+                // Retrieve safe translated urls (account for react async state delay)
+                try {
+                   const tCache = JSON.parse(localStorage.getItem('3k_translate_cache') || '{}');
+                   for (let i = 0; i < imageReplacements.length; i++) {
+                     if (results[i]?.status === 'done') {
+                       const cacheKey = `${language}_${imageModel}_${imageReplacements[i].oldSrc}`;
+                       // fallback to newSrc if it's already translated, or use the one from state
+                       translatedUrls.push(tCache[cacheKey] || imageReplacements[i].newSrc);
+                     }
+                   }
+                } catch(e) {
+                   for (let i = 0; i < imageReplacements.length; i++) {
+                     if (results[i]?.status === 'done') translatedUrls.push(imageReplacements[i].newSrc);
+                   }
                 }
+
                 if (translatedUrls.length > 0) {
                   let tIdx = 0;
                   for (let i = 0; i < imageReplacements.length; i++) {
