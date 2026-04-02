@@ -220,7 +220,18 @@ export default function App() {
       ];
       let currentKeyIdx = 0;
 
+      // Load cache
+      let rehostCache = {};
+      try {
+        rehostCache = JSON.parse(localStorage.getItem('3k_rehost_cache') || '{}');
+      } catch(e) {}
+
       const rehostImage = async (url, attempt = 1) => {
+        if (rehostCache[url]) {
+          console.log(`[ReHost] ⚡ CACHE HIT: ${url.substring(0, 50)}`);
+          return rehostCache[url];
+        }
+        
         try {
           // Fetch image via proxy
           const needsProxy = url.includes('alicdn.com') || url.includes('1688.com') || url.includes('cbu01') || url.includes('cbu02');
@@ -258,6 +269,9 @@ export default function App() {
           
           if (data.success) {
             console.log(`[ReHost] ✅ OK (${Math.round(blob.size/1024)}KB, key ${currentKeyIdx % IMGBB_KEYS.length}): ${data.data.url.substring(0, 50)}`);
+            // Save to cache
+            rehostCache[url] = data.data.url;
+            try { localStorage.setItem('3k_rehost_cache', JSON.stringify(rehostCache)); } catch(e){}
             return data.data.url;
           }
           

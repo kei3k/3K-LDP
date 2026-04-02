@@ -451,9 +451,28 @@ Output the edited image with all text translated to ${targetLang}.`;
     setResults({ ...newResults });
 
     try {
+      // 1. Check cache first
+      const cacheKey = `${language}_${imageModel}_${item.newSrc}`;
+      let translateCache = {};
+      try { translateCache = JSON.parse(localStorage.getItem('3k_translate_cache') || '{}'); } catch(e) {}
+      
+      if (translateCache[cacheKey]) {
+        console.log(`[Translate] ⚡ CACHE HIT for: ${item.newSrc.substring(0, 30)}...`);
+        onUpdateImage(i, translateCache[cacheKey]);
+        newResults[i] = { status: 'done' };
+        setResults({ ...newResults });
+        return true;
+      }
+
+      // 2. Translate if no cache
       const result = await translateImage(item.newSrc, language, imageModel);
       setTranslateProgress(`📤 Upload ảnh đã dịch: ${item.blockName}...`);
       const newUrl = await uploadToImgBB(result.base64);
+      
+      // 3. Save to cache
+      translateCache[cacheKey] = newUrl;
+      try { localStorage.setItem('3k_translate_cache', JSON.stringify(translateCache)); } catch(e) {}
+      
       onUpdateImage(i, newUrl);
       newResults[i] = { status: 'done' };
       setResults({ ...newResults });
