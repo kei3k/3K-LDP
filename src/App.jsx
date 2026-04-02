@@ -192,8 +192,24 @@ export default function App() {
     setError(null);
 
     try {
-      const images = templateProduct?.images || [];
-      setProgress(`🖼️ Re-host ${images.length} ảnh...`);
+      const rawImages = templateProduct?.images || [];
+      
+      // Filter out junk images: icons, logos, badges, tiny placeholders
+      const JUNK_KEYWORDS = ['overseas_pic', 'tps-', 'badge', 'banner-icon', 'nav-icon', 'aplus', 'toolbar', 'captcha', 'beacon'];
+      const images = rawImages.filter(url => {
+        const lower = url.toLowerCase();
+        // Skip URLs containing junk keywords
+        if (JUNK_KEYWORDS.some(kw => lower.includes(kw))) {
+          console.log(`[ReHost] FILTERED junk URL: ${url.substring(0, 70)}`);
+          return false;
+        }
+        // Skip very short URLs (likely broken)
+        if (url.length < 40) return false;
+        return true;
+      });
+      
+      console.log(`[ReHost] Filtered ${rawImages.length} → ${images.length} images (removed ${rawImages.length - images.length} junk)`);
+      setProgress(`🖼️ Re-host ${images.length} ảnh (đã lọc ${rawImages.length - images.length} ảnh rác)...`);
 
       // Multi-key ImgBB rotation for avoiding rate limits
       const IMGBB_KEYS = [
@@ -215,8 +231,10 @@ export default function App() {
             return null;
           }
           const blob = await resp.blob();
-          if (blob.size < 500) {
-            console.warn(`[ReHost] Image too small (${blob.size}b): ${url.substring(0, 60)}`);
+          
+          // Filter out tiny images (icons, logos, badges) — real product photos are > 10KB
+          if (blob.size < 10000) {
+            console.warn(`[ReHost] SKIP tiny image (${blob.size}b < 10KB): ${url.substring(0, 60)}`);
             return null;
           }
 
@@ -239,7 +257,7 @@ export default function App() {
           const data = await upRes.json();
           
           if (data.success) {
-            console.log(`[ReHost] ✅ OK (key ${currentKeyIdx % IMGBB_KEYS.length}): ${data.data.url.substring(0, 50)}`);
+            console.log(`[ReHost] ✅ OK (${Math.round(blob.size/1024)}KB, key ${currentKeyIdx % IMGBB_KEYS.length}): ${data.data.url.substring(0, 50)}`);
             return data.data.url;
           }
           

@@ -278,12 +278,12 @@ function Step1Images({ imageReplacements, isLoading, onProceed, onUpdateImage, h
               <div key={i} className="rounded-lg bg-muted/30 overflow-hidden">
                 <div className="flex items-center gap-2 p-2">
                   <div className="flex-shrink-0 text-center">
-                    <img src={item.oldSrc} className="w-14 h-14 object-cover rounded border border-border opacity-50" onError={(e) => e.target.style.display = 'none'} />
+                    <img src={item.oldSrc && (item.oldSrc.includes('1688.com') || item.oldSrc.includes('alicdn.com') || item.oldSrc.includes('cbu0')) ? `/api/fetch-url?url=${encodeURIComponent(item.oldSrc)}` : item.oldSrc} className="w-14 h-14 object-cover rounded border border-border opacity-50" onError={(e) => e.target.style.display = 'none'} />
                     <div className="text-[8px] text-muted-foreground mt-0.5">Cũ</div>
                   </div>
                   <div className="text-sm text-muted-foreground">→</div>
                   <div className="flex-shrink-0 text-center cursor-pointer group" onClick={() => setEditingIdx(editingIdx === i ? null : i)}>
-                    <img src={item.newSrc} className="w-14 h-14 object-cover rounded border-2 border-primary group-hover:border-violet-400 transition-colors" onError={(e) => e.target.style.display = 'none'} />
+                    <img src={item.newSrc && (item.newSrc.includes('1688.com') || item.newSrc.includes('alicdn.com') || item.newSrc.includes('cbu0')) ? `/api/fetch-url?url=${encodeURIComponent(item.newSrc)}` : item.newSrc} className="w-14 h-14 object-cover rounded border-2 border-primary group-hover:border-violet-400 transition-colors" onError={(e) => e.target.style.display = 'none'} />
                     <div className="text-[8px] text-primary mt-0.5">📷 Bấm đổi</div>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -593,7 +593,7 @@ Output the edited image with all text translated to ${targetLang}.`;
                   onClick={e => e.stopPropagation()}
                 />
                 {/* Image preview */}
-                <img src={item.newSrc} className="w-48 h-48 object-cover rounded-lg border border-border flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
+                <img src={item.newSrc && (item.newSrc.includes('1688.com') || item.newSrc.includes('alicdn.com') || item.newSrc.includes('cbu0')) ? `/api/fetch-url?url=${encodeURIComponent(item.newSrc)}` : item.newSrc} className="w-48 h-48 object-cover rounded-lg border border-border flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-foreground truncate font-medium">{item.blockName}</p>
