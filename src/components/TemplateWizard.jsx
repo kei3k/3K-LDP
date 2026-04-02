@@ -341,6 +341,7 @@ function Step2TranslateImages({ imageReplacements, language, apiKey, isLoading, 
   const [results, setResults] = useState({}); // {index: {status: 'done'|'error'|'processing', error?: string}}
   const [imageModel, setImageModel] = useState('gemini-2.5-flash-image');
   const [errorLog, setErrorLog] = useState([]); // [{index, blockName, error, time}]
+  const [cleanUntranslated, setCleanUntranslated] = useState(true);
   const cancelRef = useRef(false);
 
   const imageModels = [
@@ -676,16 +677,52 @@ Output the edited image with all text translated to ${targetLang}.`;
 
       {/* Skip / Proceed button */}
       {!translating && (
-        <button
-          onClick={onProceed}
-          className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
-            doneCount > 0
-              ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80'
-          }`}
-        >
-          {doneCount > 0 ? `📝 Bước tiếp: Dịch text (${doneCount} ảnh đã dịch) →` : '⏭️ Bỏ qua, không dịch ảnh →'}
-        </button>
+        <div className="space-y-3">
+          {doneCount > 0 && (
+            <div className="flex items-center gap-2 p-3 bg-card border border-border rounded-xl cursor-pointer" onClick={() => setCleanUntranslated(!cleanUntranslated)}>
+              <input 
+                type="checkbox" 
+                checked={cleanUntranslated} 
+                onChange={(e) => setCleanUntranslated(e.target.checked)}
+                className="w-4 h-4 rounded accent-violet-500 flex-shrink-0"
+                onClick={e => e.stopPropagation()}
+              />
+              <div className="flex-1">
+                <p className="text-xs font-bold text-foreground">Chỉ sử dụng ảnh đã được dịch</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Tự động lấy ảnh đã dịch lấp vào các vị trí ảnh tiếng Trung còn sót lại trên LDP (giúp xóa sạch ảnh rác 1688).</p>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              if (cleanUntranslated && doneCount > 0) {
+                const translatedUrls = [];
+                for (let i = 0; i < imageReplacements.length; i++) {
+                  if (results[i]?.status === 'done') {
+                    translatedUrls.push(imageReplacements[i].newSrc);
+                  }
+                }
+                if (translatedUrls.length > 0) {
+                  let tIdx = 0;
+                  for (let i = 0; i < imageReplacements.length; i++) {
+                    if (results[i]?.status !== 'done') {
+                      onUpdateImage(i, translatedUrls[tIdx % translatedUrls.length]);
+                      tIdx++;
+                    }
+                  }
+                }
+              }
+              onProceed();
+            }}
+            className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+              doneCount > 0
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            {doneCount > 0 ? `📝 Bước tiếp: Dịch text (${doneCount} ảnh đã dịch) →` : '⏭️ Bỏ qua, không dịch ảnh →'}
+          </button>
+        </div>
       )}
     </div>
   );
