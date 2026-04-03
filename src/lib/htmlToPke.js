@@ -7,81 +7,14 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-/**
- * Extract CSS from HTML head section
- */
-function extractStyles(html) {
-  const styles = [];
-  
-  // Extract inline <style> blocks
-  const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-  let match;
-  while ((match = styleRegex.exec(html)) !== null) {
-    styles.push(match[1]);
-  }
-  
-  return styles.join('\n');
-}
-
-/**
- * Extract body content from full HTML document
- */
-function extractBodyContent(html) {
-  // Try to extract <body> content
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-  if (bodyMatch) {
-    return bodyMatch[1].trim();
-  }
-  // If no body tag, return the html as-is (might already be a fragment)
-  return html.trim();
-}
-
-/**
- * Extract scripts from HTML
- */
-function extractScripts(html) {
-  const scripts = [];
-  // Only grab non-module, non-data scripts (actual JS code)
-  const scriptRegex = /<script(?![^>]*(?:type\s*=\s*["'](?:application\/json|application\/ld\+json)["']))[^>]*>([\s\S]*?)<\/script>/gi;
-  let match;
-  while ((match = scriptRegex.exec(html)) !== null) {
-    const content = match[1].trim();
-    if (content && content.length > 10 && !content.startsWith('{')) {
-      scripts.push(content);
-    }
-  }
-  return scripts.join('\n;\n');
-}
-
-/**
- * Convert HTML to Webcake's .pke format (MessagePack + Base64)
- * 
- * Strategy: 
- * - Extract CSS → put into extra_css setting
- * - Extract JS → put into extra_script setting  
- * - Extract body content → put into text-block specials.text
- * - This way Webcake can render the content properly
- * 
- * @param {string} html - The full HTML page content
- * @param {string} productName - The name of the product/page 
- * @returns {string} The base64 encoded .pke content
- */
 export function generatePkeBuffer(html, productName = 'Landing Page') {
+  const pageId = generateId();
   const sectionId = generateId();
   const textBlockId = generateId();
 
-  // Separate HTML into components Webcake can handle
-  const css = extractStyles(html);
-  const bodyContent = extractBodyContent(html);
-  const scripts = extractScripts(html);
+  const escapedHtml = html.trim();
 
-  // Wrap body content with scoped styles inline 
-  // This ensures styles work even if extra_css isn't applied
-  const wrappedContent = css 
-    ? `<style>${css}</style>\n${bodyContent}`
-    : bodyContent;
-
-  // Build the valid Webcake Schema
+  // Re-creating the minimum valid Webcake Schema based on our analysis
   const pkeData = {
     source: {
       settings: {
@@ -94,18 +27,14 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
         global_track_ids: [],
         gg_tag_manager_id: '',
         fontGeneral: 'Muli',
-        fb_tracking_code: '',
         favicon: '',
-        extra_script: scripts || '',
-        extra_css: css || '',
+        facebook_pixel_ids: [],
         description: '',
-        country: 'VN',
-        bhet: '',
-        bbet: '',
+        custom_code: '',
         auto_save_info_user: '0',
         auto_save_draft: '1',
-        auto_complete_form_in_popup: '0',
-        analytic_heatmap: '',
+        auto_save_abandoned_cart: '0',
+        abandonedCartConfigs: {},
       },
       popup: [],
       page: [
@@ -115,21 +44,21 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
           runtime: { firstInit: false },
           responsive: {
             mobile: {
-              styles: { position: 'relative', height: 'auto' },
+              styles: { position: 'relative', height: 10000 },
               config: { overlay: '', notloaded: false, bgOverlayHidden: {}, bgHidden: {} }
             },
             desktop: {
-              styles: { position: 'relative', height: 'auto' },
+              styles: { position: 'relative', height: 10000 },
               config: { overlay: '', notloaded: false, bgOverlayHidden: {}, bgHidden: {} }
             }
           },
-          properties: { sync: true, name: 'Section', movable: false },
+          properties: { sync: true, name: 'section_1', movable: false },
           id: sectionId,
           events: [],
           children: [
             {
               type: 'text-block',
-              specials: { text: wrappedContent, tag: 'div' },
+              specials: { text: escapedHtml, tag: 'div' },
               runtime: { firstInit: false },
               responsive: {
                 mobile: {
@@ -137,7 +66,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
                     width: 420,
                     top: 0,
                     left: 0,
-                    height: 'auto',
+                    height: 10000,
                     zIndex: 1,
                   },
                   config: { notloaded: false }
@@ -147,7 +76,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
                     width: 1200,
                     top: 0,
                     left: 0,
-                    height: 'auto',
+                    height: 10000,
                     zIndex: 1,
                   },
                   config: { notloaded: false }
