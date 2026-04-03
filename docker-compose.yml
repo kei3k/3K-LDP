@@ -8,6 +8,7 @@ services:
       - "5173:5173"
     environment:
       - NODE_ENV=development
+      - DOCKER=true
     volumes:
       - .:/app
       # Ignored node_modules volume so host env doesn't conflict with container

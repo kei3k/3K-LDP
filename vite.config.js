@@ -47,7 +47,7 @@ export default defineConfig({
     }
   ],
   server: {
-    open: true,
+    open: !process.env.DOCKER,
   },
   resolve: {
     alias: {
