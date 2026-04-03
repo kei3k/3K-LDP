@@ -52,14 +52,8 @@ export default function LadiPageToPke() {
       const pkeBase64 = generatePkeBuffer(html, title);
       
       // Download
-      // Convert base64 to Blob directly in browser
-      const bstr = atob(pkeBase64);
-      const u8arr = new Uint8Array(bstr.length);
-      for (let i = 0; i < bstr.length; i++) {
-        u8arr[i] = bstr.charCodeAt(i);
-      }
-      
-      const blob = new Blob([u8arr], { type: 'application/octet-stream' });
+      // Webcake expects the .pke file to contain the Base64 string directly
+      const blob = new Blob([pkeBase64], { type: 'application/octet-stream' });
       
       // Build filename from domain + simple timestamp
       let domain = 'export';
