@@ -8,6 +8,7 @@ import StepLayout from './components/StepLayout';
 import StepContentEdit from './components/StepContentEdit';
 import TemplateWizard from './components/TemplateWizard';
 import ImageTranslator from './components/ImageTranslator';
+import LadiPageToPke from './components/LadiPageToPke';
 import { 
   generateLandingPages, 
   stepExtract, stepBuildLayout, stepExtractTexts, 
@@ -901,11 +902,26 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
             >
               🌐 Dịch ảnh SP
             </button>
+            <button
+              onClick={() => setActiveTab('ladipage_to_pke')}
+              className={`flex-1 py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'ladipage_to_pke'
+                  ? 'text-sky-500 border-b-2 border-sky-500 bg-sky-500/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+              }`}
+            >
+              🔥 LadiPage → PKE
+            </button>
           </div>
 
           {/* Image Translator tab */}
           {activeTab === 'translate' && (
             <ImageTranslator apiKey={config.apiKey} model={config.model} />
+          )}
+
+          {/* LadiPage -> PKE tab */}
+          {activeTab === 'ladipage_to_pke' && (
+            <LadiPageToPke />
           )}
 
           {/* Template PKE tab */}
