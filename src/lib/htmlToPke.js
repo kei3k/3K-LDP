@@ -119,10 +119,15 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   const buffer = encode(pkeData);
 
   // Convert to Base64 String
-  // In Node it's Buffer.from().toString('base64'), but in browser:
-  const base64String = btoa(
-    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-  );
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  // Use chunking to avoid Maximum Call Stack Size or out-of-memory errors
+  const CHUNK_SIZE = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  const base64String = btoa(binary);
 
   return base64String;
 }
