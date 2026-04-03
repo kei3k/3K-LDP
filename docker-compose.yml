@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  ldp-generator:
+    build: .
+    container_name: ldp-generator
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - .:/app
+      # Ignored node_modules volume so host env doesn't conflict with container
+      - /app/node_modules
+    restart: unless-stopped
