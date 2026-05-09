@@ -164,9 +164,14 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
     // Fallback: non-LadiPage HTML — produce 1 section with full HTML
     pageSections = [buildSection({ html: escapedHtml, name: 'section_1', sectionIndex: 1, height: 10000 })];
   } else {
-    // LadiPage: one PKE section per com-section div
-    // Each text-block gets the bare com-section outerHTML only (no <head>).
-    // CSS/JS are hoisted to settings.extra_css / settings.extra_script.
+    // LadiPage: one PKE section per com-section div.
+    // Hybrid CSS strategy: extra_css carries the page-wide stylesheet (for
+    // preview/published rendering), but each text-block ALSO embeds a <style>
+    // block of the same CSS so the Webcake editor canvas — which renders each
+    // text-block in isolation without the page-level extra_css — still shows
+    // the correct layout while editing.
+    const inlineStyleTag = extraCss ? '<style>' + extraCss + '</style>' : '';
+
     let formCounter = 0;
     pageSections = comSections.map((sec, idx) => {
       const sectionIndex = idx + 1;
@@ -185,8 +190,8 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
       const m = head.match(heightRe);
       const sectionHeight = m ? parseInt(m[1], 10) : 1500;
 
-      // text-block carries bare com-section HTML — no <head> duplication
-      return buildSection({ html: sec.outerHTML, name, sectionIndex, height: sectionHeight });
+      const wrappedHtml = inlineStyleTag + sec.outerHTML;
+      return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight });
     });
   }
 
