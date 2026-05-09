@@ -86,7 +86,7 @@ export default function LadiPageToPke() {
           </div>
           <h2 className="text-2xl font-bold flex items-center justify-center gap-2">
             LadiPage → Webcake (.pke)
-            <span className="text-xs bg-sky-100 text-sky-600 px-2 py-1 rounded-full font-medium">v1.0.1</span>
+            <span className="text-xs bg-sky-100 text-sky-600 px-2 py-1 rounded-full font-medium">v2.0 (split)</span>
           </h2>
           <p className="text-muted-foreground text-sm">
             Nhập URL của trang LadiPage để tải mã nguồn HTML và chuyển đổi tự động thành file PKE (phiên bản không bóc tách CSS/JS, 100% giống gốc).
