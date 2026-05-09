@@ -142,8 +142,22 @@ function extractScripts(html) {
   return chunks.join('\n');
 }
 
+/**
+ * Remove the literal class "lazy" from every class="..." attribute.
+ * LadiPage uses CSS rules like `.lazy { background:none!important }` to hide
+ * elements until its runtime JS strips the class on load. Webcake's editor
+ * canvas never executes that JS, so the backgrounds stay hidden. Pre-stripping
+ * the class bakes in the post-load visible state.
+ */
+function stripLazyClasses(html) {
+  return html.replace(
+    /(\bclass="[^"]*?)\blazy\b\s?([^"]*")/gi,
+    (full, before, after) => before + after
+  );
+}
+
 export function generatePkeBuffer(html, productName = 'Landing Page') {
-  const escapedHtml = html.trim();
+  const escapedHtml = stripLazyClasses(html.trim());
 
   // Extract <head> block for height parsing and CSS/JS extraction
   const headMatch = escapedHtml.match(/<head\b[^>]*>[\s\S]*?<\/head>/i);
