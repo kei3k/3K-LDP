@@ -11,10 +11,16 @@
     "start": "vite"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@google-cloud/storage": "^7.19.0",
     "@msgpack/msgpack": "^3.1.3",
     "@tailwindcss/vite": "^4.2.1",
+    "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "google-auth-library": "^10.6.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",

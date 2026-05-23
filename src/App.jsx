@@ -9,6 +9,8 @@ import StepContentEdit from './components/StepContentEdit';
 import TemplateWizard from './components/TemplateWizard';
 import ImageTranslator from './components/ImageTranslator';
 import LadiPageToPke from './components/LadiPageToPke';
+import VideoPipelineTab from './components/video-pipeline/VideoPipelineTab';
+import VideoPipelineHelp from './components/video-pipeline/VideoPipelineHelp';
 import { 
   generateLandingPages, 
   stepExtract, stepBuildLayout, stepExtractTexts, 
@@ -850,25 +852,27 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
       </div>
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-        {/* Sidebar — fixed width, scrollable, border separator */}
-        <div className="relative w-full lg:w-[380px] xl:w-[420px] flex-shrink-0 border-r border-border">
-          <ConfigForm
-            config={config}
-            setConfig={setConfig}
-            onGenerate={handleGenerate}
-            onStartWizard={handleStartWizard}
-            isGenerating={isGenerating || isLoading}
-            progress={progress}
-            generatedHtml={generatedHtml}
-          />
-          <button
-            onClick={toggleTheme}
-            className="hidden lg:flex absolute top-4 right-4 p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors z-20"
-            title={theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'}
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-        </div>
+        {/* Sidebar — hidden when on AI Video tab (it has its own full-width layout) */}
+        {activeTab !== 'video_pipeline' && (
+          <div className="relative w-full lg:w-[380px] xl:w-[420px] flex-shrink-0 border-r border-border">
+            <ConfigForm
+              config={config}
+              setConfig={setConfig}
+              onGenerate={handleGenerate}
+              onStartWizard={handleStartWizard}
+              isGenerating={isGenerating || isLoading}
+              progress={progress}
+              generatedHtml={generatedHtml}
+            />
+            <button
+              onClick={toggleTheme}
+              className="hidden lg:flex absolute top-4 right-4 p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors z-20"
+              title={theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
 
         {/* Main content area */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -912,7 +916,36 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
             >
               🔥 LadiPage → PKE
             </button>
+            <button
+              onClick={() => setActiveTab('video_pipeline')}
+              className={`flex-1 py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'video_pipeline'
+                  ? 'text-pink-500 border-b-2 border-pink-500 bg-pink-500/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+              }`}
+            >
+              🎬 AI Video
+            </button>
+            <button
+              onClick={() => setActiveTab('video_help')}
+              className={`flex-1 py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'video_help'
+                  ? 'text-emerald-500 border-b-2 border-emerald-500 bg-emerald-500/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+              }`}
+            >
+              📖 Hướng dẫn AI Video
+            </button>
           </div>
+
+          {/* AI Video Pipeline tab */}
+          {activeTab === 'video_pipeline' && (
+            <VideoPipelineTab apiKey={config.apiKey} />
+          )}
+
+          {activeTab === 'video_help' && (
+            <VideoPipelineHelp />
+          )}
 
           {/* Image Translator tab */}
           {activeTab === 'translate' && (

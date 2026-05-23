@@ -2,11 +2,30 @@ import { useState } from 'react';
 import { Download, Globe, Link as LinkIcon, Loader2, FileDown } from 'lucide-react';
 import { generatePkeBuffer } from '../lib/htmlToPke';
 
+const LANGUAGES = [
+  { value: 'Tiếng Việt', label: '🇻🇳 Tiếng Việt' },
+  { value: 'English', label: '🇺🇸 English' },
+  { value: 'ภาษาไทย', label: '🇹🇭 ภาษาไทย' },
+  { value: '中文', label: '🇨🇳 中文' },
+  { value: '日本語', label: '🇯🇵 日本語' },
+  { value: '한국어', label: '🇰🇷 한국어' },
+  { value: 'Bahasa Indonesia', label: '🇮🇩 Bahasa Indonesia' },
+];
+
 export default function LadiPageToPke() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [language, setLanguage] = useState(
+    () => localStorage.getItem('ladipage_language') || 'Tiếng Việt'
+  );
+
+  const handleLanguageChange = (e) => {
+    const val = e.target.value;
+    setLanguage(val);
+    localStorage.setItem('ladipage_language', val);
+  };
 
   const handleConvert = async () => {
     if (!url.trim()) {
@@ -91,6 +110,18 @@ export default function LadiPageToPke() {
           <p className="text-muted-foreground text-sm">
             Nhập URL của trang LadiPage để tải mã nguồn HTML và chuyển đổi tự động thành file PKE (phiên bản không bóc tách CSS/JS, 100% giống gốc).
           </p>
+        </div>
+
+        <div className="flex justify-end mb-1">
+          <select
+            value={language}
+            onChange={handleLanguageChange}
+            className="text-xs border border-border rounded-md px-2 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-sky-500"
+          >
+            {LANGUAGES.map(l => (
+              <option key={l.value} value={l.value}>{l.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="bg-card border border-border p-6 rounded-xl shadow-sm space-y-4">
