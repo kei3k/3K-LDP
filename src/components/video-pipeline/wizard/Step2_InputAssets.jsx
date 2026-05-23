@@ -88,8 +88,82 @@ export default function Step2_InputAssets({ step1Template, value, onApprove }) {
     onApprove({ productImages, characters, template: selectedTemplate, targetDuration: effectiveDuration });
   }, [productImages, characters, selectedTemplate, duration, useCustomDuration, customDuration, onApprove]);
 
+  const allTemplates = step1Template
+    ? [step1Template, ...templates.filter(t => t.id !== step1Template.id)]
+    : templates;
+
   return (
     <div className="flex flex-col gap-5">
+      {/* Template selection — top so user picks first */}
+      <section className="rounded-xl border-2 border-pink-500/40 bg-pink-500/5 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold flex items-center gap-1.5">
+            📋 Chọn template <span className="text-[10px] font-normal text-muted-foreground">({allTemplates.length} có sẵn)</span>
+          </h3>
+          {selectedTemplate && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-pink-500 text-white font-bold">
+              ✓ Đã chọn: {selectedTemplate.name}
+            </span>
+          )}
+        </div>
+
+        {allTemplates.length === 0 ? (
+          <div className="text-xs text-muted-foreground italic px-2 py-3 text-center bg-muted/20 rounded-lg">
+            Chưa có template. Quay lại <strong>Bước 1</strong> phân tích 1 video mẫu + bấm <strong>"Lưu vào thư viện"</strong>.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
+            {allTemplates.map(t => {
+              const isStep1 = step1Template?.id === t.id;
+              const selected = selectedTemplate?.id === t.id;
+              const sceneCount = t.structure?.scenes?.length || 0;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => setSelectedTemplate(t)}
+                  className={`group relative rounded-lg p-2.5 cursor-pointer text-xs transition-all border-2 ${
+                    selected
+                      ? 'bg-pink-500/20 border-pink-500 shadow-md shadow-pink-500/20'
+                      : 'bg-muted/30 border-border hover:border-pink-500/50 hover:bg-muted/50'
+                  }`}
+                  title={t.transcript ? t.transcript.substring(0, 200) : ''}
+                >
+                  {isStep1 && (
+                    <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[9px] font-bold">
+                      MỚI
+                    </span>
+                  )}
+                  <div className="font-bold text-foreground truncate pr-5">{t.name || 'Không tên'}</div>
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                    {t.totalDuration && <span>⏱ {t.totalDuration}s</span>}
+                    {sceneCount > 0 && <span>🎬 {sceneCount} cảnh</span>}
+                  </div>
+                  {t.transcript && (
+                    <div className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 leading-snug">
+                      {t.transcript.substring(0, 80)}{t.transcript.length > 80 ? '…' : ''}
+                    </div>
+                  )}
+                  {!isStep1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Xoá template "${t.name}"?`)) {
+                          deleteTemplate(t.id);
+                          if (selected) setSelectedTemplate(null);
+                        }
+                      }}
+                      className="absolute top-1.5 right-1.5 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Product images */}
       <section>
         <h3 className="text-sm font-bold mb-2">Ảnh sản phẩm</h3>
@@ -207,25 +281,6 @@ export default function Step2_InputAssets({ step1Template, value, onApprove }) {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* Template selection */}
-      <section>
-        <h3 className="text-sm font-bold mb-2">Template</h3>
-        {step1Template && (
-          <div
-            onClick={() => setSelectedTemplate(step1Template)}
-            className={`mb-2 px-3 py-2 rounded-lg cursor-pointer text-sm border transition-colors ${selectedTemplate?.id === step1Template.id ? 'bg-pink-500/20 border-pink-500/40' : 'bg-muted/40 border-border hover:bg-muted'}`}
-          >
-            Dùng template vừa phân tích: <span className="font-medium">{step1Template.name}</span>
-          </div>
-        )}
-        <TemplateLibraryList
-          templates={templates.filter(t => !step1Template || t.id !== step1Template.id)}
-          onSelect={setSelectedTemplate}
-          onDelete={deleteTemplate}
-          selectedId={selectedTemplate?.id}
-        />
       </section>
 
       {/* Duration */}
