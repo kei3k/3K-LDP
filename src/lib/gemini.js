@@ -621,6 +621,97 @@ export async function callGeminiDirect(prompt, apiKey, model = 'gemini-2.0-flash
   return callGemini(prompt, apiKey, model, maxTokens);
 }
 
+/**
+ * translateLandingHtml — translate visible text in arbitrary landing-page HTML
+ * to a target language. Does NOT swap product info (unlike translateTemplateHtml).
+ * Returns translated HTML string.
+ */
+export async function translateLandingHtml(html, targetLanguage, apiKey, model = 'gemini-2.0-flash', onProgress) {
+  if (!targetLanguage || targetLanguage === 'Tiếng Việt') return html;
+  onProgress?.(`🌐 Đang dịch toàn bộ text sang ${targetLanguage}...`);
+
+  // Strip scripts/styles/svg first
+  let stripped = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+  stripped = stripped.replace(/<style[\s\S]*?<\/style>/gi, '');
+  stripped = stripped.replace(/<svg[\s\S]*?<\/svg>/gi, '');
+
+  const rawPieces = new Set();
+  const textRegex = />([^<]+)</g;
+  let m;
+  while ((m = textRegex.exec(stripped)) !== null) {
+    const txt = m[1].trim();
+    if (txt.length > 1 && /[a-zA-Zก-๙฀-๿一-鿿À-ɏẠ-ỹ]/.test(txt)) {
+      rawPieces.add(txt);
+    }
+  }
+  // placeholder, alt, title attributes
+  for (const re of [/placeholder=['"]([^"']+)/g, /alt=['"]([^"']+)/g, /title=['"]([^"']+)/g]) {
+    while ((m = re.exec(html)) !== null) {
+      if (m[1].trim().length > 1) rawPieces.add(m[1].trim());
+    }
+  }
+
+  const decode = (s) => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+  const textMap = [];
+  for (const raw of rawPieces) {
+    const clean = decode(raw);
+    if (clean.length > 1) textMap.push({ raw, clean });
+  }
+  const textList = textMap.slice(0, 200);
+
+  if (!textList.length) {
+    onProgress?.('Không có text để dịch.');
+    return html;
+  }
+  console.log(`[Landing] Translating ${textList.length} text pieces → ${targetLanguage}`);
+
+  const prompt = `Bạn là chuyên gia dịch thuật landing page bán hàng.
+
+NHIỆM VỤ: Dịch TOÀN BỘ ${textList.length} text dưới đây sang ${targetLanguage}.
+- Text đã ở ngôn ngữ ${targetLanguage} → giữ nguyên.
+- Giữ nguyên emoji, số liệu, ký hiệu tiền tệ.
+- Văn phong tự nhiên, marketing, hấp dẫn ${targetLanguage}.
+- KHÔNG dịch tên thương hiệu / URL / mã sản phẩm.
+
+Danh sách ${textList.length} text (đánh số):
+${textList.map((t, i) => `${i}: "${t.clean}"`).join('\n')}
+
+Trả về ĐÚNG JSON array với ${textList.length} phần tử:
+[{"original":"text gốc 0","translated":"bản dịch 0"}, ...]
+CHỈ JSON ARRAY, không markdown.`;
+
+  let translations = [];
+  try {
+    const result = await callGemini(prompt, apiKey, model, 8192);
+    translations = Array.isArray(result) ? result : (result?.translations || []);
+  } catch (err) {
+    console.error('[Landing] Gemini error:', err.message);
+    onProgress?.('⚠️ Dịch lỗi: ' + err.message);
+    return html;
+  }
+
+  const lookup = new Map();
+  for (const { original, translated } of translations) {
+    if (original && translated && original !== translated) lookup.set(original, translated);
+  }
+
+  // Replace longest first to avoid partial overlaps
+  let translatedHtml = html;
+  let applied = 0;
+  const sorted = [...textMap].sort((a, b) => b.raw.length - a.raw.length);
+  for (const { raw, clean } of sorted) {
+    const tr = lookup.get(clean);
+    if (tr && translatedHtml.includes(raw)) {
+      translatedHtml = translatedHtml.split(raw).join(tr);
+      applied++;
+    }
+  }
+
+  console.log(`[Landing] Applied ${applied}/${translations.length} translations`);
+  onProgress?.(`✅ Đã dịch ${applied} text sang ${targetLanguage}`);
+  return translatedHtml;
+}
+
 async function callGemini(prompt, apiKey, model = 'gemini-2.0-flash', maxTokens = 8192) {
   const url = getApiUrl(model);
   console.log('[LDP] Calling Gemini:', model);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, Globe, Link as LinkIcon, Loader2, FileDown } from 'lucide-react';
 import { generatePkeBuffer } from '../lib/htmlToPke';
+import { translateLandingHtml } from '../lib/vertexTranslate';
 
 const LANGUAGES = [
   { value: 'Tiếng Việt', label: '🇻🇳 Tiếng Việt' },
@@ -15,6 +16,7 @@ const LANGUAGES = [
 export default function LadiPageToPke() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState('');
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [language, setLanguage] = useState(
@@ -44,9 +46,10 @@ export default function LadiPageToPke() {
     setIsLoading(true);
     setError(null);
     setSuccessMsg('');
+    setProgress('');
 
     try {
-      // Use the Vite proxy to bypass CORS
+      setProgress('🌐 Đang tải HTML từ URL...');
       const proxyUrl = `/api/fetch-url?url=${encodeURIComponent(url)}`;
       const res = await fetch(proxyUrl);
       
@@ -54,7 +57,7 @@ export default function LadiPageToPke() {
         throw new Error(`Không thể tải trang (${res.status})`);
       }
       
-      const html = await res.text();
+      let html = await res.text();
       
       if (!html || html.length < 100) {
          throw new Error('Nội dung HTML quá ngắn hoặc trống.');
@@ -67,7 +70,12 @@ export default function LadiPageToPke() {
         title = titleMatch[1].trim();
       }
 
-      // Generate PKE (base64 string)
+      // Translate if target language != Vietnamese (uses Vertex gemini-3-flash-preview)
+      if (language && language !== 'Tiếng Việt') {
+        html = await translateLandingHtml(html, language, setProgress);
+      }
+
+      setProgress('📦 Đang đóng gói PKE...');
       const pkeBase64 = generatePkeBuffer(html, title);
       
       // Download
@@ -87,10 +95,16 @@ export default function LadiPageToPke() {
       a.click();
       URL.revokeObjectURL(downloadUrl);
       
-      setSuccessMsg('Chuyển đổi và tải xuống thành công!');
+      setSuccessMsg(
+        language === 'Tiếng Việt'
+          ? 'Chuyển đổi và tải xuống thành công!'
+          : `Đã dịch sang ${language} + tải PKE thành công!`
+      );
+      setProgress('');
     } catch (err) {
       console.error('LadiPage to PKE Error:', err);
       setError(err.message || 'Có lỗi xảy ra khi chuyển đổi');
+      setProgress('');
     } finally {
       setIsLoading(false);
     }
@@ -143,6 +157,12 @@ export default function LadiPageToPke() {
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-sm rounded-lg">
               {error}
+            </div>
+          )}
+
+          {progress && (
+            <div className="p-3 bg-sky-500/10 border border-sky-500/20 text-sky-500 text-sm rounded-lg flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" /> {progress}
             </div>
           )}
 
