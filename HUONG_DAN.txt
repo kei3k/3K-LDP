@@ -1,0 +1,94 @@
+═══════════════════════════════════════════════════════════
+  3K-LDP AI VIDEO TOOL — HƯỚNG DẪN SỬ DỤNG
+═══════════════════════════════════════════════════════════
+
+✅ HỖ TRỢ: Windows + macOS + Linux
+✅ YÊU CẦU: Node.js v18 trở lên (tải tại https://nodejs.org)
+
+
+📦 BƯỚC 1 — CÀI ĐẶT (chỉ làm 1 lần duy nhất)
+───────────────────────────────────────────
+
+▶ Windows:
+   • Double-click  INSTALL.bat
+   • Đợi 2-3 phút
+
+▶ macOS:
+   • Mở Terminal (Cmd+Space → gõ "terminal")
+   • Kéo file INSTALL.command vào cửa sổ Terminal → Enter
+   • HOẶC double-click INSTALL.command (nếu Mac chặn:
+     System Settings → Privacy → Allow)
+   • Đợi 2-3 phút
+
+▶ Linux:
+   • Mở Terminal trong thư mục giải nén
+   • Chạy:  bash INSTALL.command
+
+
+🚀 BƯỚC 2 — CHẠY TOOL (mỗi khi muốn dùng)
+─────────────────────────────────────────
+
+▶ Windows:  Double-click  START.bat
+▶ macOS:    Double-click  START.command  (hoặc kéo vào Terminal)
+▶ Linux:    bash START.command
+
+Sau 3 giây, trình duyệt sẽ tự mở http://localhost:5173
+→ Vào tab "🎬 AI Video" → bắt đầu dùng.
+
+❗ KHÔNG đóng cửa sổ Terminal/Command Prompt khi đang sử dụng tool.
+
+
+🎬 SỬ DỤNG TOOL
+───────────────
+
+Đọc tab "📖 Hướng dẫn AI Video" trong tool để biết chi tiết
+từng bước (Wizard / Flow / Bilingual / Templates / Cost...).
+
+
+🛑 KHI MUỐN TẮT TOOL
+────────────────────
+
+- Trong cửa sổ Terminal/CMD, ấn  Ctrl + C
+- Đóng cửa sổ Terminal
+- Đóng tab trình duyệt
+
+
+🔄 UPDATE TOOL (KHÔNG CẦN TẢI ZIP MỚI)
+──────────────────────────────────────
+
+CÁCH 1 (Auto, tiện nhất):
+   • Windows:  Double-click UPDATE.bat
+   • macOS:    Double-click UPDATE.command
+   → Script tự tải code mới từ GitHub, giữ nguyên vertex-key.json + .env
+   → Tự chạy npm install
+   → Xong là chạy START là dùng được phiên bản mới.
+
+CÁCH 2 (Manual, khi UPDATE auto fail):
+   • Anh Kei gửi file zip mới
+   • Giải nén → ĐÈ LÊN thư mục cũ (giữ vertex-key.json + .env)
+   • Chạy lại INSTALL → START
+
+
+
+═══════════════════════════════════════════════════════════
+  TROUBLESHOOTING
+═══════════════════════════════════════════════════════════
+
+❓ Mac báo "cannot be opened because developer cannot be verified"
+   → Click chuột phải vào INSTALL.command → Open → confirm
+   → Hoặc: System Settings → Privacy → Allow Anyway
+
+❓ "Vertex AI chưa cấu hình" hiện trong tool
+   → Kiểm tra file vertex-key.json và .env có nằm cùng thư mục
+     với START.bat / START.command không.
+
+❓ "Failed to fetch" khi upload video
+   → Đóng cửa sổ Terminal → mở START lại.
+
+❓ Port 5173 đang dùng
+   → Khởi động lại máy hoặc tắt các tool khác đang dùng port này.
+
+
+═══════════════════════════════════════════════════════════
+  Liên hệ: anh Kei (kei.marketer@gmail.com)
+═══════════════════════════════════════════════════════════
