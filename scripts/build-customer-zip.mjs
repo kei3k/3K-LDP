@@ -20,27 +20,37 @@ const OUT = 'D:/Download/3K-LDP-AI-Video-Tool.zip';
 
 // Files/dirs to keep in SRC (not overwritten by sync)
 const KEEP_IN_DIST = new Set(['vertex-key.json', '.env']);
-// Dirs/files to skip when syncing FROM worktree
+// Dirs/files to skip when syncing FROM worktree — by name, matches at ANY depth
 const SKIP_FROM_WORKTREE = new Set([
   '.git', '.claude', 'node_modules', 'dist', '.github', '.eslintcache',
-  // Legacy junk files from earlier project state — not needed for AI Video tool
-  'buydash.html', 'dealworldnow.html', 'template1_raw.html', 'template2_raw.html',
+]);
+// Specific root-level files to skip (legacy junk at repo root, NOT inside src/)
+const SKIP_ROOT_FILES = new Set([
+  'buydash.html', 'dealworldnow.html',
+  'template1_raw.html', 'template2_raw.html',  // root-level duplicates, real ones in src/lib/templates/
   'convert_to_pke.mjs', 'install_and_run.bat', 'start.sh',
   'Dockerfile', 'docker-compose.yml',
   'template1.md', 'template2.md', 'test.md', 'README.md', 'jsconfig.json',
   'test-cleaned.pke',
 ]);
-const SKIP_EXT = new Set(['.log', '.pke', '.zip']);
+const SKIP_EXT = new Set(['.log', '.zip']);
+// Root-level extensions to skip
+const SKIP_ROOT_EXT = new Set(['.pke']);
 // Sub-paths to skip (forward-slash normalized)
 const SKIP_PATHS = new Set(['public/ffmpeg']);
 
 function norm(p) { return p.split(sep).join('/'); }
 
-function shouldSkip(name, rel) {
+function shouldSkip(name, rel, isRoot) {
   if (SKIP_FROM_WORKTREE.has(name)) return true;
+  if (isRoot && SKIP_ROOT_FILES.has(name)) return true;
   if (SKIP_PATHS.has(norm(rel))) return true;
   const dot = name.lastIndexOf('.');
-  if (dot > 0 && SKIP_EXT.has(name.substring(dot))) return true;
+  if (dot > 0) {
+    const ext = name.substring(dot);
+    if (SKIP_EXT.has(ext)) return true;
+    if (isRoot && SKIP_ROOT_EXT.has(ext)) return true;
+  }
   return false;
 }
 
@@ -48,7 +58,7 @@ function syncTree(srcRoot, destRoot, relPath = '') {
   const srcDir = join(srcRoot, relPath);
   for (const name of readdirSync(srcDir)) {
     const rel = relPath ? join(relPath, name) : name;
-    if (shouldSkip(name, rel)) continue;
+    if (shouldSkip(name, rel, relPath === '')) continue;
     const srcPath = join(srcDir, name);
     const destPath = join(destRoot, rel);
     const st = statSync(srcPath);
@@ -74,7 +84,7 @@ function purgeStale(destRoot, srcRoot, relPath = '') {
     if (norm(rel) === 'public/ffmpeg') continue;
     const destPath = join(destDir, name);
     const srcPath = join(srcRoot, rel);
-    if (!existsSync(srcPath) || shouldSkip(name, rel)) {
+    if (!existsSync(srcPath) || shouldSkip(name, rel, relPath === '')) {
       rmSync(destPath, { recursive: true, force: true });
       console.log(`  -  removed stale ${norm(rel)}`);
       continue;
