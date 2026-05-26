@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Download, Globe, Link as LinkIcon, Loader2, FileDown } from 'lucide-react';
+import { Download, Globe, Link as LinkIcon, Loader2, FileDown, Scissors } from 'lucide-react';
 import { generatePkeBuffer } from '../lib/htmlToPke';
 import { translateLandingHtml } from '../lib/vertexTranslate';
+import { stripContactInfo } from '../lib/stripContacts';
 
 const LANGUAGES = [
   { value: 'Tiếng Việt', label: '🇻🇳 Tiếng Việt' },
@@ -22,6 +23,20 @@ export default function LadiPageToPke() {
   const [language, setLanguage] = useState(
     () => localStorage.getItem('ladipage_language') || 'Tiếng Việt'
   );
+  const [removePhones, setRemovePhones] = useState(
+    () => localStorage.getItem('ladipage_remove_phones') !== 'false'
+  );
+  const [removeZalo, setRemoveZalo] = useState(
+    () => localStorage.getItem('ladipage_remove_zalo') !== 'false'
+  );
+  const [customRemove, setCustomRemove] = useState(
+    () => localStorage.getItem('ladipage_remove_custom') || ''
+  );
+  const [stripStats, setStripStats] = useState(null);
+
+  const updateRemovePhones = (v) => { setRemovePhones(v); localStorage.setItem('ladipage_remove_phones', String(v)); };
+  const updateRemoveZalo = (v) => { setRemoveZalo(v); localStorage.setItem('ladipage_remove_zalo', String(v)); };
+  const updateCustomRemove = (v) => { setCustomRemove(v); localStorage.setItem('ladipage_remove_custom', v); };
 
   const handleLanguageChange = (e) => {
     const val = e.target.value;
@@ -68,6 +83,21 @@ export default function LadiPageToPke() {
       const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
       if (titleMatch && titleMatch[1]) {
         title = titleMatch[1].trim();
+      }
+
+      // Strip contact info BEFORE translation (saves translation tokens too)
+      setStripStats(null);
+      if (removePhones || removeZalo || customRemove.trim()) {
+        setProgress('✂️ Đang xóa hotline / Zalo cũ...');
+        const customStrings = customRemove.split('\n').map(s => s.trim()).filter(Boolean);
+        const stripped = stripContactInfo(html, {
+          removePhones,
+          removeZalo,
+          customStrings,
+          onProgress: setProgress,
+        });
+        html = stripped.html;
+        setStripStats({ count: stripped.removedCount, samples: stripped.samples });
       }
 
       // Translate if target language != Vietnamese (uses Vertex gemini-3-flash-preview)
@@ -152,6 +182,48 @@ export default function LadiPageToPke() {
               onKeyDown={(e) => e.key === 'Enter' && handleConvert()}
               disabled={isLoading}
             />
+          </div>
+
+          {/* Strip contact info section */}
+          <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-2">
+            <label className="text-sm font-bold flex items-center gap-1.5">
+              <Scissors className="w-4 h-4" /> Xóa thông tin liên hệ cũ
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={removePhones}
+                  onChange={e => updateRemovePhones(e.target.checked)}
+                  className="rounded border-border accent-sky-500"
+                />
+                <span>Tự xóa số điện thoại (0xxxxx, +84…)</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={removeZalo}
+                  onChange={e => updateRemoveZalo(e.target.checked)}
+                  className="rounded border-border accent-sky-500"
+                />
+                <span>Tự xóa link Zalo (zalo.me / tel:)</span>
+              </label>
+            </div>
+            <textarea
+              value={customRemove}
+              onChange={e => updateCustomRemove(e.target.value)}
+              rows={3}
+              placeholder="Mỗi dòng = 1 chuỗi muốn xóa (vd: tên fanpage, hotline cố định, slogan cũ...)"
+              className="w-full text-xs bg-background border border-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-y font-mono"
+            />
+            {stripStats && (
+              <div className="text-[11px] text-muted-foreground">
+                ✂️ Đã xóa <span className="font-bold text-sky-400">{stripStats.count}</span> mục.
+                {stripStats.samples.length > 0 && (
+                  <span> Mẫu: <code className="text-[10px]">{stripStats.samples.slice(0, 5).join(' · ')}</code></span>
+                )}
+              </div>
+            )}
           </div>
 
           {error && (
