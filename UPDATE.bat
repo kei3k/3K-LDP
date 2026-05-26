@@ -15,37 +15,62 @@ set REPO=kei3k/3K-LDP
 set ZIP=%TEMP%\3K-LDP-update.zip
 set EXTRACT=%TEMP%\3K-LDP-update
 
-echo [1/5] Tai source moi tu GitHub...
-powershell -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://codeload.github.com/%REPO%/zip/refs/heads/%BRANCH%' -OutFile '%ZIP%' -TimeoutSec 60"
+echo [0/6] Dung Vite dev server cu (neu dang chay)...
+taskkill /F /IM node.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
+
+echo [1/6] Tai source moi tu GitHub (~1MB)...
+del "%ZIP%" 2>nul
+powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -Uri 'https://codeload.github.com/%REPO%/zip/refs/heads/%BRANCH%' -OutFile '%ZIP%' -TimeoutSec 60; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }"
 if errorlevel 1 (
-    echo [LOI] Tai zip that bai. Kiem tra ket noi mang.
+    echo [LOI] Tai zip that bai. Kiem tra ket noi mang / firewall.
     pause
     exit /b 1
 )
+if not exist "%ZIP%" (
+    echo [LOI] File zip khong duoc tai ve.
+    pause
+    exit /b 1
+)
+for %%A in ("%ZIP%") do echo       Da tai: %%~zA bytes
 
-echo [2/5] Giai nen tam...
+echo [2/6] Giai nen tam...
 if exist "%EXTRACT%" rmdir /s /q "%EXTRACT%"
-powershell -Command "Expand-Archive -Path '%ZIP%' -DestinationPath '%EXTRACT%' -Force"
+powershell -NoProfile -Command "Expand-Archive -Path '%ZIP%' -DestinationPath '%EXTRACT%' -Force"
 if errorlevel 1 (
     echo [LOI] Giai nen that bai.
     pause
     exit /b 1
 )
 
-REM Find the extracted subfolder (GitHub names it 3K-LDP-claude-hardcore-payne-74b124)
+set SRC=
 for /d %%i in ("%EXTRACT%\*") do set SRC=%%i
+if "%SRC%"=="" (
+    echo [LOI] Khong tim thay folder source sau khi giai nen.
+    pause
+    exit /b 1
+)
+echo       Source: %SRC%
 
-echo [3/5] Ap dung file moi (giu nguyen vertex-key.json + .env)...
-REM Copy everything from extracted source to current folder, EXCEPT keys
-robocopy "%SRC%" . /E /XF "vertex-key.json" ".env" /XD ".github" /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS >nul
-
-echo [4/5] Cap nhat dependencies...
-call npm install
-if errorlevel 1 (
-    echo [CANH BAO] npm install loi nhung file da update. Thu chay lai sau.
+echo [3/6] Ap dung file moi (giu nguyen vertex-key.json + .env)...
+robocopy "%SRC%" . /E /XF "vertex-key.json" ".env" /XD ".github" "node_modules" "public\ffmpeg" /R:1 /W:1 /NP
+set RC=%ERRORLEVEL%
+if %RC% GEQ 8 (
+    echo [LOI] Robocopy that bai voi exit code %RC%.
+    pause
+    exit /b 1
 )
 
-echo [5/5] Don dep...
+echo [4/6] Cap nhat dependencies (npm install)...
+call npm install
+if errorlevel 1 (
+    echo [CANH BAO] npm install co loi. Tool van co the chay duoc.
+)
+
+echo [5/6] Luu version moi...
+powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm' | Out-File -FilePath '.update_version' -Encoding utf8"
+
+echo [6/6] Don dep...
 rmdir /s /q "%EXTRACT%" 2>nul
 del "%ZIP%" 2>nul
 
@@ -54,6 +79,6 @@ echo ========================================
 echo   UPDATE HOAN TAT!
 echo ========================================
 echo.
-echo Chay START.bat de mo tool voi phien ban moi.
+echo Bay gio chay START.bat de mo tool voi phien ban moi.
 echo.
 pause
