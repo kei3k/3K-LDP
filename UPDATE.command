@@ -52,15 +52,26 @@ fi
 echo "      Source: $SRC"
 
 echo "[3/6] Ap dung file moi (giu nguyen vertex-key.json + .env)..."
-if command -v rsync &> /dev/null; then
-  rsync -a --exclude="vertex-key.json" --exclude=".env" --exclude="node_modules" --exclude="public/ffmpeg" --exclude=".github" "$SRC/" ./
-else
-  cp -p vertex-key.json /tmp/_vk.bak 2>/dev/null
-  cp -p .env /tmp/_env.bak 2>/dev/null
-  cp -R "$SRC/." ./
-  cp -p /tmp/_vk.bak vertex-key.json 2>/dev/null
-  cp -p /tmp/_env.bak .env 2>/dev/null
-  rm -f /tmp/_vk.bak /tmp/_env.bak
+# Backup keys
+[ -f vertex-key.json ] && cp -p vertex-key.json /tmp/_vk.bak
+[ -f .env ] && cp -p .env /tmp/_env.bak
+
+# Strip node_modules + public/ffmpeg from source before copy (large + regenerable)
+rm -rf "$SRC/node_modules" "$SRC/public/ffmpeg" "$SRC/.github" 2>/dev/null
+
+# Copy ALL files from SRC into current folder (-R recursive, -p preserve, -v verbose)
+echo "      Copying files..."
+cp -Rp "$SRC/." ./ 2>&1 | tail -3
+
+# Restore keys
+[ -f /tmp/_vk.bak ] && cp -p /tmp/_vk.bak vertex-key.json
+[ -f /tmp/_env.bak ] && cp -p /tmp/_env.bak .env
+rm -f /tmp/_vk.bak /tmp/_env.bak
+
+# Verify critical file exists
+if [ ! -f "src/lib/templates/template2_raw.html" ]; then
+  echo "[CANH BAO] template2_raw.html VAN BI THIEU! Copy that bai."
+  echo "          Vui long lien he anh Kei."
 fi
 
 chmod +x *.command *.sh 2>/dev/null

@@ -61,6 +61,12 @@ if %RC% GEQ 8 (
     exit /b 1
 )
 
+REM Verify critical file
+if not exist "src\lib\templates\template2_raw.html" (
+    echo [CANH BAO] template2_raw.html VAN BI THIEU! Copy that bai.
+    echo            Vui long lien he anh Kei.
+)
+
 echo [4/6] Cap nhat dependencies (npm install)...
 call npm install
 if errorlevel 1 (
