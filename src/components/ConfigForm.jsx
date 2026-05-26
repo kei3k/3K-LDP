@@ -467,7 +467,9 @@ export default function ConfigForm({ config, setConfig, onGenerate, onStartWizar
           </div>
         </Section>
 
-        {/* API Settings */}
+        {/* API Settings — ẨN vì tool đã dùng Vertex AI service account.
+            Khi cần dùng lại AI Studio API key, đổi flag SHOW_API_SETTINGS = true */}
+        {false && (
         <Section
           icon={<Settings className="w-4 h-4" />}
           title="Cài đặt API"
@@ -517,6 +519,7 @@ export default function ConfigForm({ config, setConfig, onGenerate, onStartWizar
             </p>
           </FormField>
         </Section>
+        )}
 
         {/* GENERATE BUTTON */}
         <button
