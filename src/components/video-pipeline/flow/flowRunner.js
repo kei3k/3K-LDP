@@ -1,7 +1,7 @@
-import { analyzeVideo, generateScript } from '@/lib/geminiVideo';
-import { generateRefImage } from '@/lib/nanoBananaClient';
-import { generateClip } from '@/lib/veoClient';
-import { concatClips } from '@/lib/videoConcat';
+import { analyzeVideo, generateScript } from '../../../lib/geminiVideo.js';
+import { generateRefImage } from '../../../lib/nanoBananaClient.js';
+import { generateClip } from '../../../lib/veoClient.js';
+import { concatClips } from '../../../lib/videoConcat.js';
 
 async function blobToBase64(blob) {
   const ab = await blob.arrayBuffer();
