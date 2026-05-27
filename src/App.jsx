@@ -11,6 +11,7 @@ import ImageTranslator from './components/ImageTranslator';
 import LadiPageToPke from './components/LadiPageToPke';
 import VideoPipelineTab from './components/video-pipeline/VideoPipelineTab';
 import VideoPipelineHelp from './components/video-pipeline/VideoPipelineHelp';
+import TTSTab from './components/TTSTab';
 import { 
   generateLandingPages, 
   stepExtract, stepBuildLayout, stepExtractTexts, 
@@ -936,6 +937,16 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
             >
               📖 Hướng dẫn AI Video
             </button>
+            <button
+              onClick={() => setActiveTab('tts')}
+              className={`flex-1 py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'tts'
+                  ? 'text-cyan-500 border-b-2 border-cyan-500 bg-cyan-500/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+              }`}
+            >
+              🔊 TTS
+            </button>
           </div>
 
           {/* AI Video Pipeline tab */}
@@ -945,6 +956,11 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
 
           {activeTab === 'video_help' && (
             <VideoPipelineHelp />
+          )}
+
+          {/* TTS tab */}
+          {activeTab === 'tts' && (
+            <TTSTab />
           )}
 
           {/* Image Translator tab */}
