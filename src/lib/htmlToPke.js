@@ -227,17 +227,19 @@ function extractScripts(html) {
 }
 
 /**
- * Remove the literal class "lazy" from every class="..." attribute.
- * LadiPage uses CSS rules like `.lazy { background:none!important }` to hide
- * elements until its runtime JS strips the class on load. Webcake's editor
- * canvas never executes that JS, so the backgrounds stay hidden. Pre-stripping
- * the class bakes in the post-load visible state.
+ * Remove lazy-load markers from every class="..." attribute.
+ * LadiPage uses two variants:
+ *   - `class="lazy"` (older builds): CSS hides until JS strips it
+ *   - `class="ladi-lazyload"` (newer builds): JS sets background-image on
+ *     IntersectionObserver hit. In Webcake's preview/editor that JS doesn't
+ *     run, so backgrounds stay invisible.
+ * Pre-strip both so all backgrounds bake-in the post-load visible state.
  */
 function stripLazyClasses(html) {
-  return html.replace(
-    /(\bclass="[^"]*?)\blazy\b\s?([^"]*")/gi,
-    (full, before, after) => before + after
-  );
+  return html
+    .replace(/(\bclass="[^"]*?)\bladi-lazyload\b\s?([^"]*")/gi, (_, b, a) => b + a)
+    .replace(/(\bclass='[^']*?)\bladi-lazyload\b\s?([^']*')/gi, (_, b, a) => b + a)
+    .replace(/(\bclass="[^"]*?)\blazy\b\s?([^"]*")/gi, (_, b, a) => b + a);
 }
 
 export function generatePkeBuffer(html, productName = 'Landing Page') {
