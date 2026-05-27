@@ -291,10 +291,25 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
         name = 'section_' + sectionIndex;
       }
 
-      // Parse section height from head CSS (e.g. #w-xyw6kism { height: 564px })
-      const heightRe = new RegExp('#' + sectionElementId + '[^{]*\\{[^}]*height\\s*:\\s*(\\d+)px', 'i');
-      const m = head.match(heightRe);
-      const sectionHeight = m ? parseInt(m[1], 10) : 1500;
+      // Parse section height from head CSS. Two LadiPage quirks handled:
+      //   1) Heights are often DECIMAL (e.g. "height: 607.078px") — capture (\d+(?:\.\d+)?)
+      //   2) Need word boundary so #SECTION6 doesn't match #SECTION68 (regex
+      //      [^{]* would otherwise happily eat the "8" before {)
+      // Try strict (selector immediately followed by { ) first, then loose fallback.
+      const escId = sectionElementId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let sectionHeight = 1500;
+      // Strict: #SECTIONxxx { ... height: NNN.NNNpx }
+      const strictRe = new RegExp('#' + escId + '\\s*\\{[^}]*height\\s*:\\s*(\\d+(?:\\.\\d+)?)px', 'i');
+      const sm = head.match(strictRe);
+      if (sm) {
+        sectionHeight = Math.round(parseFloat(sm[1]));
+      } else {
+        // Loose: #SECTIONxxx<selector>{...height:Npx} but block prefix collision
+        // by requiring next char after id be \W (non-id char)
+        const looseRe = new RegExp('#' + escId + '(?![A-Za-z0-9_-])[^{]*\\{[^}]*height\\s*:\\s*(\\d+(?:\\.\\d+)?)px', 'i');
+        const lm = head.match(looseRe);
+        if (lm) sectionHeight = Math.round(parseFloat(lm[1]));
+      }
 
       const wrappedHtml = inlineStyleTag + sec.outerHTML;
       return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight });
