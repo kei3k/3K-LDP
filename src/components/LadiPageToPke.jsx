@@ -229,8 +229,6 @@ export default function LadiPageToPke() {
     const val = e.target.value;
     setLanguage(val);
     localStorage.setItem('ladipage_language', val);
-    // Auto-disable image translation when switching back to Vietnamese
-    if (val === 'Tiếng Việt') updateTranslateImages(false);
   };
 
   // Opens the modal and returns a Promise<string[]> — resolves with selected URLs or [] if skipped
@@ -309,7 +307,8 @@ export default function LadiPageToPke() {
       }
 
       // ── Image translation step ────────────────────────────────────────────
-      if (translateImages && language !== 'Tiếng Việt') {
+      // Works for ANY target language including Vietnamese (source might be Thai/Chinese)
+      if (translateImages) {
         setProgress('🔍 Đang scan ảnh trong trang...');
 
         const allImages = extractImageUrls(html, url);
@@ -461,28 +460,27 @@ export default function LadiPageToPke() {
               />
             </div>
 
-            {/* Image translation toggle — only visible when non-Vietnamese */}
-            {!isVietnamese && (
-              <div className="border border-violet-200 dark:border-violet-800/40 rounded-lg p-3 bg-violet-50/50 dark:bg-violet-900/10">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={translateImages}
-                    onChange={(e) => updateTranslateImages(e.target.checked)}
-                    className="rounded border-border accent-violet-500 w-4 h-4"
-                  />
-                  <span className="text-sm font-medium flex items-center gap-1.5">
-                    <Image className="w-4 h-4 text-violet-500" />
-                    Dịch cả text trong ảnh (Nano Banana 2)
-                  </span>
-                </label>
-                {translateImages && (
-                  <p className="text-[11px] text-muted-foreground mt-1.5 ml-6">
-                    Sẽ hiện bảng chọn ảnh sau khi tải xong HTML. Mỗi ảnh ~$0.04.
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Image translation toggle — always available
+                (e.g. cloning Thai landing → Vietnamese needs image translation too) */}
+            <div className="border border-violet-200 dark:border-violet-800/40 rounded-lg p-3 bg-violet-50/50 dark:bg-violet-900/10">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={translateImages}
+                  onChange={(e) => updateTranslateImages(e.target.checked)}
+                  className="rounded border-border accent-violet-500 w-4 h-4"
+                />
+                <span className="text-sm font-medium flex items-center gap-1.5">
+                  <Image className="w-4 h-4 text-violet-500" />
+                  Dịch cả text trong ảnh sang <span className="text-violet-500">{language}</span> (Nano Banana 2)
+                </span>
+              </label>
+              {translateImages && (
+                <p className="text-[11px] text-muted-foreground mt-1.5 ml-6">
+                  Sẽ hiện bảng chọn ảnh sau khi tải xong HTML. Mỗi ảnh ~$0.04.
+                </p>
+              )}
+            </div>
 
             {/* Strip contact info section */}
             <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-2">
