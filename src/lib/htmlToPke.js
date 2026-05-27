@@ -161,15 +161,19 @@ function buildSection({ html, name, sectionIndex, height, canvasDesktop = 1200 }
 }
 
 /**
- * isHiddenOrPopupSection — detect LadiPage popup / hidden sections that should
- * NOT be exported as visible sections in PKE. Heuristics:
- *   1) The section's CSS in the page <head> sets display:none / visibility:hidden
- *      / position:absolute with off-screen coords
- *   2) DOM content (after stripping LadiPage scaffolding) is essentially empty:
- *      no text, no <img src>, no <input>, no inline background-image
+ * isHiddenOrPopupSection — detect LadiPage sections that are GENUINELY hidden
+ * popups (display:none in page CSS or off-screen positioned).
+ *
+ * IMPORTANT: We do NOT filter "empty-looking" sections by DOM heuristic —
+ * LadiPage stores image URLs in PAGE CSS (#IMAGE99 { background-image: url(...) })
+ * rather than inline style. So a section can have substantial content even
+ * though its raw HTML looks like empty scaffolding divs. False-positive
+ * filtering caused product image sections to disappear in webcake clone.
+ *
+ * Only filter when CSS explicitly hides the section.
  */
 function isHiddenOrPopupSection(sectionId, sectionHtml, headCss) {
-  // CSS-based: look for #SECTION{id}{...display:none...}
+  // CSS-based ONLY: look for #SECTION{id}{...display:none...}
   const escId = sectionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const cssBlockRe = new RegExp('#' + escId + '\\b[^{]*\\{([^}]*)\\}', 'gi');
   let m;
@@ -179,22 +183,6 @@ function isHiddenOrPopupSection(sectionId, sectionHtml, headCss) {
     if (/\bvisibility\s*:\s*hidden\b/.test(body)) return true;
     if (/\btop\s*:\s*-\d{4,}px\b/.test(body)) return true; // off-screen
   }
-
-  // DOM-based: strip LadiPage scaffolding (background wrappers + empty elements)
-  // and check if anything substantive remains.
-  let stripped = sectionHtml
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '');
-
-  // Extract text content
-  const textOnly = stripped.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-  // Detect populated images/inputs
-  const hasImgSrc = /<img[^>]+\bsrc\s*=\s*['"][^'"]+['"]/i.test(stripped);
-  const hasBgImage = /background-image\s*:\s*url\(['"]?[^'"\)]+/i.test(stripped);
-  const hasInput = /<input\b|<button\b|<form\b|<a\b[^>]+href\s*=\s*['"]https?:/i.test(stripped);
-
-  // Heuristic: if section is essentially empty scaffolding, treat as popup
-  if (textOnly.length < 5 && !hasImgSrc && !hasBgImage && !hasInput) return true;
   return false;
 }
 
