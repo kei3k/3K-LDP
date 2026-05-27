@@ -8,9 +8,17 @@ import zlib from 'zlib'
 import { GoogleAuth } from 'google-auth-library'
 import { Storage } from '@google-cloud/storage'
 import { randomUUID } from 'crypto'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { tmpdir } from 'os'
 import { promises as fs } from 'fs'
+
+// Capture git commit hash + build date once per Vite process start
+function readGitCommit() {
+  try { return execSync('git rev-parse --short HEAD', { cwd: __dirname || '.' }).toString().trim() }
+  catch { return 'unknown' }
+}
+const BUILD_COMMIT = readGitCommit()
+const BUILD_DATE = new Date().toISOString().slice(0, 10)
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -416,6 +424,10 @@ export default defineConfig(({ mode }) => {
   },
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
+  define: {
+    __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __BUILD_DATE__: JSON.stringify(BUILD_DATE),
   },
   resolve: {
     alias: {

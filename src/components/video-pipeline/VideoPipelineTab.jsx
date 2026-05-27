@@ -3,6 +3,7 @@ import { Wand2, GitBranch, Mic, CheckCircle2, AlertCircle } from 'lucide-react';
 import VideoPipelineWizard from './wizard/VideoPipelineWizard';
 import FlowEditor from './flow/FlowEditor';
 import CloneVoice from './CloneVoice';
+import { APP_VERSION, BUILD_COMMIT, BUILD_DATE } from '../../version';
 
 const LANGUAGES = [
   { value: 'Tiếng Việt', label: '🇻🇳 Tiếng Việt' },
@@ -82,7 +83,15 @@ export default function VideoPipelineTab({ apiKey }) {
           </select>
         </div>
 
-        <VertexBadge status={vertexStatus} />
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] bg-pink-500/15 text-pink-500 dark:text-pink-300 px-1.5 py-0.5 rounded font-mono"
+            title={`Build ${BUILD_COMMIT} · ${BUILD_DATE}`}
+          >
+            v{APP_VERSION}·{BUILD_COMMIT}
+          </span>
+          <VertexBadge status={vertexStatus} />
+        </div>
       </div>
 
       {vertexStatus.ready === false && <NotConfiguredBanner />}
