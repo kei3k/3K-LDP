@@ -399,8 +399,14 @@ export default function TTSTab() {
               Tải xuống
             </button>
             <button
-              onClick={() => alert('Tính năng Clone Voice sắp ra')}
-              className="flex-1 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-bold border border-border transition-all"
+              onClick={() => {
+                if (!audioBlobRef.current) return;
+                window._cloneVoiceAudio = audioBlobRef.current;
+                sessionStorage.setItem('_pending_clone_audio', '1');
+                window.dispatchEvent(new Event('clone-voice-loaded'));
+                setStatus('Đã gửi audio sang Clone Voice. Hãy chuyển sang tab AI Video → Clone Voice.');
+              }}
+              className="flex-1 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-bold border border-cyan-500/30 transition-all"
             >
               Gửi vào Clone Voice
             </button>

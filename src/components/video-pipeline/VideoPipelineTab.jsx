@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Wand2, GitBranch, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Wand2, GitBranch, Mic, CheckCircle2, AlertCircle } from 'lucide-react';
 import VideoPipelineWizard from './wizard/VideoPipelineWizard';
 import FlowEditor from './flow/FlowEditor';
+import CloneVoice from './CloneVoice';
 
 const LANGUAGES = [
   { value: 'Tiếng Việt', label: '🇻🇳 Tiếng Việt' },
@@ -61,6 +62,14 @@ export default function VideoPipelineTab({ apiKey }) {
             >
               <GitBranch size={14} /> Flow
             </button>
+            <button
+              onClick={() => setMode('clone')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${
+                mode === 'clone' ? 'bg-cyan-500 text-white shadow' : 'text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Mic size={14} /> Clone Voice
+            </button>
           </div>
           <select
             value={language}
@@ -79,9 +88,9 @@ export default function VideoPipelineTab({ apiKey }) {
       {vertexStatus.ready === false && <NotConfiguredBanner />}
 
       <div className="flex-1 min-h-0 overflow-auto">
-        {mode === 'wizard'
-          ? <VideoPipelineWizard credentials={credentials} language={language} />
-          : <FlowEditor credentials={credentials} language={language} />}
+        {mode === 'wizard' && <VideoPipelineWizard credentials={credentials} language={language} />}
+        {mode === 'flow'   && <FlowEditor credentials={credentials} language={language} />}
+        {mode === 'clone'  && <CloneVoice />}
       </div>
     </div>
   );

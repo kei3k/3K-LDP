@@ -271,6 +271,103 @@ export default defineConfig(({ mode }) => {
         })
       }
     },
+    // Audio swap — replaces video's audio track with a new audio file (Clone Voice feature)
+    // Two endpoints: upload (slot=video|audio) + run (trigger ffmpeg)
+    {
+      name: 'swap-audio',
+      configureServer(server) {
+        server.middlewares.use('/api/swap-audio', async (req, res) => {
+          const parsedUrl = new URL(req.url, 'http://localhost')
+          const pathname = parsedUrl.pathname  // '/upload' or '/run'
+          const id = parsedUrl.searchParams.get('id') || ''
+          const slot = parsedUrl.searchParams.get('slot') || ''
+
+          if (req.method !== 'POST') {
+            res.statusCode = 405; res.end('POST only'); return
+          }
+          if (!id) {
+            res.statusCode = 400; res.end('Missing id param'); return
+          }
+
+          // ── Upload endpoint: save raw body to temp file ──────────────────
+          if (pathname === '/upload' || pathname === '/api/swap-audio/upload') {
+            if (!['video', 'audio'].includes(slot)) {
+              res.statusCode = 400; res.end('slot must be video or audio'); return
+            }
+            const ext = slot === 'video' ? 'mp4' : 'audio'
+            const tmpPath = path.join(tmpdir(), `sa_${id}_${slot}.${ext}`)
+            try {
+              const fh = await fs.open(tmpPath, 'w')
+              const ws = fh.createWriteStream()
+              await new Promise((resolve, reject) => {
+                req.pipe(ws)
+                req.on('end', resolve)
+                req.on('error', reject)
+                ws.on('error', reject)
+              })
+              console.log(`[SwapAudio] Saved ${slot}: ${tmpPath}`)
+              res.statusCode = 200; res.end('ok')
+            } catch (e) {
+              console.error('[SwapAudio] Upload error:', e.message)
+              res.statusCode = 500; res.end(e.message)
+            }
+            return
+          }
+
+          // ── Run endpoint: ffmpeg swap then stream result ──────────────────
+          if (pathname === '/run' || pathname === '/api/swap-audio/run') {
+            const videoPath = path.join(tmpdir(), `sa_${id}_video.mp4`)
+            const audioPath = path.join(tmpdir(), `sa_${id}_audio.audio`)
+            const outPath   = path.join(tmpdir(), `sa_${id}_out.mp4`)
+            try {
+              // Verify both files exist
+              await fs.access(videoPath)
+              await fs.access(audioPath)
+
+              let stderr = ''
+              await new Promise((resolve, reject) => {
+                const ff = spawn('ffmpeg', [
+                  '-y',
+                  '-i', videoPath,
+                  '-i', audioPath,
+                  '-map', '0:v',
+                  '-map', '1:a',
+                  '-c:v', 'copy',
+                  '-c:a', 'aac',
+                  '-shortest',
+                  outPath,
+                ])
+                ff.stderr.on('data', (c) => { stderr += c.toString() })
+                ff.on('close', (code) => {
+                  if (code === 0) resolve()
+                  else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-600)}`))
+                })
+                ff.on('error', (e) => reject(new Error(`spawn error: ${e.message}`)))
+              })
+
+              const outBuf = await fs.readFile(outPath)
+              console.log(`[SwapAudio] Output: ${outBuf.length} bytes`)
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'video/mp4')
+              res.setHeader('Content-Length', outBuf.length)
+              res.end(outBuf)
+            } catch (e) {
+              console.error('[SwapAudio] Run error:', e.message)
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'text/plain')
+              res.end(e.message)
+            } finally {
+              fs.unlink(videoPath).catch(() => {})
+              fs.unlink(audioPath).catch(() => {})
+              fs.unlink(outPath).catch(() => {})
+            }
+            return
+          }
+
+          res.statusCode = 404; res.end('Not found')
+        })
+      }
+    },
     // Local proxy to fetch external URLs — bypasses CORS
     {
       name: 'fetch-proxy',
