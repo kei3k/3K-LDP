@@ -49,24 +49,70 @@ export function regexExtractComSections(html) {
 }
 
 /**
- * Extract com-section divs from the page, trying DOMParser first then regex fallback.
- * Returns array of { id, outerHTML, hasForm } plain objects.
+ * Regex-based fallback for newer LadiPage builds that use
+ * <div id="SECTION{N}" class='ladi-section'> instead of com-section.
+ */
+export function regexExtractLadiSections(html) {
+  const results = [];
+  // Match opening <div ... id="SECTION..." ... class='ladi-section'> tags
+  // — id can come before or after class, class may use single or double quotes
+  const openTagRe = /<div\b[^>]*\bid=["']SECTION[A-Za-z0-9_-]+["'][^>]*\bclass=["'][^"']*\bladi-section\b[^"']*["'][^>]*>|<div\b[^>]*\bclass=["'][^"']*\bladi-section\b[^"']*["'][^>]*\bid=["']SECTION[A-Za-z0-9_-]+["'][^>]*>/gi;
+  let match;
+  while ((match = openTagRe.exec(html)) !== null) {
+    const tagStart = match.index;
+    const tagEnd = match.index + match[0].length;
+    const idMatch = match[0].match(/\bid=["'](SECTION[A-Za-z0-9_-]+)["']/);
+    const id = idMatch ? idMatch[1] : '';
+
+    let depth = 1;
+    let pos = tagEnd;
+    while (pos < html.length && depth > 0) {
+      const nextOpen = html.indexOf('<div', pos);
+      const nextClose = html.indexOf('</div>', pos);
+      if (nextClose === -1) break;
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth += 1;
+        pos = nextOpen + 4;
+      } else {
+        depth -= 1;
+        pos = nextClose + 6;
+      }
+    }
+    const outerHTML = html.slice(tagStart, pos);
+    const hasForm = /<form\b/i.test(outerHTML);
+    results.push({ id, outerHTML, hasForm });
+  }
+  return results;
+}
+
+/**
+ * Extract per-section divs from the page. Supports 2 LadiPage variants:
+ *   1) Older builds: <div class="com-section" data-section ...>
+ *   2) Newer builds: <div id="SECTION{N}" class='ladi-section'>
+ * Falls through to regex when DOMParser query returns nothing.
  */
 function extractComSections(html, doc) {
-  // Attempt 1: DOM query with data-section attribute filter
+  // Variant 1 — old com-section schema
   let nodes = Array.from(doc.querySelectorAll('div.com-section[data-section]'));
   if (nodes.length > 0) {
     return nodes.map(n => ({ id: n.id, outerHTML: n.outerHTML, hasForm: !!n.querySelector('form') }));
   }
-
-  // Attempt 2: DOM query without attribute filter (handles browsers that reject boolean attr)
   nodes = Array.from(doc.querySelectorAll('div.com-section'));
   if (nodes.length > 0) {
     return nodes.map(n => ({ id: n.id, outerHTML: n.outerHTML, hasForm: !!n.querySelector('form') }));
   }
 
-  // Attempt 3: Regex fallback for browsers that mis-parse malformed attribute syntax
-  return regexExtractComSections(html);
+  // Variant 2 — newer ladi-section schema, only match the top-level SECTION* ones
+  // (skip nested .ladi-section inside groups by requiring id starts with SECTION)
+  nodes = Array.from(doc.querySelectorAll('div.ladi-section[id^="SECTION"]'));
+  if (nodes.length > 0) {
+    return nodes.map(n => ({ id: n.id, outerHTML: n.outerHTML, hasForm: !!n.querySelector('form') }));
+  }
+
+  // Regex fallback for both variants
+  const v1 = regexExtractComSections(html);
+  if (v1.length > 0) return v1;
+  return regexExtractLadiSections(html);
 }
 
 // Build a single PKE section object with a nested text-block
