@@ -935,7 +935,7 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
               }`}
             >
-              📖 Hướng dẫn AI Video
+              📖 Hướng dẫn
             </button>
             <button
               onClick={() => setActiveTab('tts')}

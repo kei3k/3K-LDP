@@ -1,6 +1,6 @@
 {
   "name": "ldp-generator",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "description": "Landing Page Clone Generator - Clone & localize landing pages using Gemini AI",
   "type": "module",

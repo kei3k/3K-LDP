@@ -4,7 +4,7 @@
  * - BUILD_COMMIT and BUILD_DATE are injected at build time by vite.config.js
  *   (using `define` substitution). At dev time they fall back to placeholders.
  */
-export const APP_VERSION = '2.5.0';
+export const APP_VERSION = '2.6.0';
 
 // These globals are defined in vite.config.js via `define:` — they're literal
 // strings at build/run time. The typeof guards keep this safe in test runners
