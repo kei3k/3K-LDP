@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import https from 'https'
 import http from 'http'
+import zlib from 'zlib'
 import { GoogleAuth } from 'google-auth-library'
 import { Storage } from '@google-cloud/storage'
 import { randomUUID } from 'crypto'
@@ -440,12 +441,12 @@ function fetchWithRedirects(url, maxRedirects = 5) {
       port: parsedUrl.port,
       path: parsedUrl.pathname + parsedUrl.search,
       method: 'GET',
-      timeout: 15000,
+      timeout: 60000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/jpeg,image/png,*/*;q=0.8',
         'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'identity',
+        'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
         // Add Referer for alicdn.com images (prevents 403)
         ...(parsedUrl.hostname.includes('alicdn.com') || parsedUrl.hostname.includes('1688.com')
@@ -483,19 +484,26 @@ function fetchWithRedirects(url, maxRedirects = 5) {
 
       const chunks = [];
       const contentType = response.headers['content-type'] || '';
-      response.on('data', chunk => chunks.push(chunk));
-      response.on('end', () => {
+      const encoding = (response.headers['content-encoding'] || '').toLowerCase();
+      // Decompress gzip/deflate streams transparently
+      let stream = response;
+      if (encoding === 'gzip') stream = response.pipe(zlib.createGunzip());
+      else if (encoding === 'deflate') stream = response.pipe(zlib.createInflate());
+      else if (encoding === 'br') stream = response.pipe(zlib.createBrotliDecompress());
+      stream.on('data', chunk => chunks.push(chunk));
+      stream.on('end', () => {
         const buffer = Buffer.concat(chunks);
-        console.log('[Proxy] Success:', url, '- Size:', buffer.length, '- Type:', contentType);
+        console.log('[Proxy] Success:', url, '- Size:', buffer.length, '- Enc:', encoding || 'none', '- Type:', contentType);
         resolve({ buffer, contentType });
       });
+      stream.on('error', reject);
       response.on('error', reject);
     });
 
     req.on('error', reject);
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Request timeout (15s)'));
+      reject(new Error('Request timeout (60s)'));
     });
     req.end();
   });
