@@ -116,7 +116,7 @@ function extractComSections(html, doc) {
 }
 
 // Build a single PKE section object with a nested text-block
-function buildSection({ html, name, sectionIndex, height }) {
+function buildSection({ html, name, sectionIndex, height, canvasDesktop = 1200 }) {
   const sectionId = generateId();
   const textBlockId = generateId();
   return {
@@ -147,7 +147,7 @@ function buildSection({ html, name, sectionIndex, height }) {
             config: { notloaded: false }
           },
           desktop: {
-            styles: { width: 1200, top: 0, left: 0, height, zIndex: 1 },
+            styles: { width: canvasDesktop, top: 0, left: 0, height, zIndex: 1 },
             config: { notloaded: false }
           }
         },
@@ -251,6 +251,33 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   const extraCss = extractStyles(head);
   const extraScript = extractScripts(head);
 
+  // Detect LadiPage's design width (the .ladi-wraper width set in CSS).
+  // Mobile-only landing pages typically declare `.ladi-wraper { width: 420px }` with
+  // no desktop override — all element coordinates assume that width. If we leave
+  // Webcake's canvas at the default 1200px desktop, the imported layout looks
+  // squashed/spread because elements were positioned for 420px.
+  //
+  // Strategy: scan all `.ladi-wraper { width: Npx }` rules; take the LARGEST
+  // numeric width found (covers both mobile-only 420 sites and desktop 1200 sites).
+  let canvasDesktop = 1200;
+  const wraperWidthRe = /\.ladi-wraper\s*\{[^}]*\bwidth\s*:\s*(\d+(?:\.\d+)?)px/gi;
+  let wm;
+  while ((wm = wraperWidthRe.exec(head)) !== null) {
+    const w = Math.round(parseFloat(wm[1]));
+    if (w > 100 && w < 2000) canvasDesktop = Math.max(canvasDesktop !== 1200 ? canvasDesktop : 0, w);
+  }
+  // For mobile-only LadiPages (420px wraper, no desktop @media), use 420 as canvas.
+  // For desktop pages, the loop above already picks the largest width.
+  // Also detect explicit mobile-only marker — only ONE wraper rule and it's small.
+  {
+    const allWraper = [...head.matchAll(/\.ladi-wraper\s*\{[^}]*\bwidth\s*:\s*(\d+(?:\.\d+)?)px/gi)];
+    if (allWraper.length === 1) {
+      const onlyWidth = Math.round(parseFloat(allWraper[0][1]));
+      if (onlyWidth > 100 && onlyWidth < 1000) canvasDesktop = onlyWidth;
+    }
+  }
+  console.info('[htmlToPke] LadiPage canvas width detected:', canvasDesktop, 'px');
+
   // Parse com-sections via DOMParser with regex fallback
   let pageSections;
   const doc = new DOMParser().parseFromString(escapedHtml, 'text/html');
@@ -268,7 +295,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
 
   if (comSections.length === 0) {
     // Fallback: non-LadiPage HTML — produce 1 section with full HTML
-    pageSections = [buildSection({ html: escapedHtml, name: 'section_1', sectionIndex: 1, height: 10000 })];
+    pageSections = [buildSection({ html: escapedHtml, name: 'section_1', sectionIndex: 1, height: 10000, canvasDesktop })];
   } else {
     // LadiPage: one PKE section per com-section div.
     // Hybrid CSS strategy: extra_css carries the page-wide stylesheet (for
@@ -312,7 +339,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
       }
 
       const wrappedHtml = inlineStyleTag + sec.outerHTML;
-      return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight });
+      return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight, canvasDesktop });
     });
   }
 
@@ -320,7 +347,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   const pkeData = {
     source: {
       settings: {
-        width_section: { mobile: 420, desktop: 1200 },
+        width_section: { mobile: 420, desktop: canvasDesktop },
         title: productName,
         tiktok_script: '',
         thumbnail: '',
