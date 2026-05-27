@@ -59,19 +59,42 @@ echo "[3/6] Ap dung file moi (giu nguyen vertex-key.json + .env)..."
 # Strip node_modules + public/ffmpeg from source before copy (large + regenerable)
 rm -rf "$SRC/node_modules" "$SRC/public/ffmpeg" "$SRC/.github" 2>/dev/null
 
-# Copy ALL files from SRC into current folder (-R recursive, -p preserve, -v verbose)
+# Fix file permissions so cp can overwrite (some users have read-only legacy files)
+chmod -R u+w . 2>/dev/null
+
+# Copy ALL files from SRC into current folder.
+# Use rsync if available (most reliable, force overwrites), else fallback to cp+ditto+find.
 echo "      Copying files..."
-cp -Rp "$SRC/." ./ 2>&1 | tail -3
+if command -v rsync &> /dev/null; then
+  rsync -a --force --delete-after \
+    --exclude='vertex-key.json' --exclude='.env' \
+    --exclude='node_modules' --exclude='public/ffmpeg' \
+    --exclude='.git' --exclude='.update_version' \
+    "$SRC/" ./
+elif command -v ditto &> /dev/null; then
+  # macOS native — overwrites everything
+  ditto "$SRC" ./
+else
+  # Pure cp fallback. Remove old src/ first so stale files don't linger.
+  rm -rf src scripts public 2>/dev/null
+  cp -Rfp "$SRC/." ./ 2>&1 | tail -3
+fi
 
 # Restore keys
 [ -f /tmp/_vk.bak ] && cp -p /tmp/_vk.bak vertex-key.json
 [ -f /tmp/_env.bak ] && cp -p /tmp/_env.bak .env
 rm -f /tmp/_vk.bak /tmp/_env.bak
 
-# Verify critical file exists
+# ── Verify the copy actually applied ──────────────────────────────
+APPLIED_VER=$(grep -oE "APP_VERSION\s*=\s*['\"]([0-9]+\.[0-9]+\.[0-9]+)" src/version.js 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+echo "      Phien ban tren dia sau update: ${APPLIED_VER:-(khong doc duoc)}"
+
 if [ ! -f "src/lib/templates/template2_raw.html" ]; then
-  echo "[CANH BAO] template2_raw.html VAN BI THIEU! Copy that bai."
-  echo "          Vui long lien he anh Kei."
+  echo ""
+  echo "[LOI NGHIEM TRONG] template2_raw.html bi mat. UPDATE that bai."
+  echo "  -> Phuong an: tai zip moi tu anh Kei, giai nen DE LEN folder hien tai."
+  read -p "An Enter de thoat..."
+  exit 1
 fi
 
 chmod +x *.command *.sh 2>/dev/null

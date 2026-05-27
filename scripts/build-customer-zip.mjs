@@ -11,6 +11,7 @@ import { readFileSync, statSync, readdirSync, existsSync, mkdirSync, copyFileSyn
 import { join, relative, sep, dirname } from 'path';
 import { writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import JSZip from 'jszip';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -104,6 +105,31 @@ if (existsSync(distFfmpeg)) {
   rmSync(distFfmpeg, { recursive: true, force: true });
   console.log('  -  removed public/ffmpeg (regenerated on customer install)');
 }
+
+// Bake commit hash + build date into a static file customers will see.
+// Customers extract from zip (no .git folder) so runtime `git rev-parse` fails.
+// We freeze the values here at zip-build time.
+try {
+  const commit = execSync('git rev-parse --short HEAD', { cwd: WORKTREE }).toString().trim();
+  const buildDate = new Date().toISOString().slice(0, 10);
+  const versionPath = join(SRC, 'src/version.js');
+  if (existsSync(versionPath)) {
+    let v = readFileSync(versionPath, 'utf8');
+    v = v.replace(
+      /typeof __BUILD_COMMIT__ !== 'undefined' \? __BUILD_COMMIT__ : 'dev'/,
+      `typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : '${commit}'`,
+    );
+    v = v.replace(
+      /typeof __BUILD_DATE__ !== 'undefined' \? __BUILD_DATE__ : new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/,
+      `typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : '${buildDate}'`,
+    );
+    writeFileSync(versionPath, v);
+    console.log(`  ✓ baked BUILD_COMMIT=${commit} BUILD_DATE=${buildDate} into src/version.js`);
+  }
+} catch (e) {
+  console.warn('  ! could not bake commit hash:', e.message);
+}
+
 console.log('Sync done.\n');
 
 if (!existsSync(SRC)) {

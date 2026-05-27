@@ -53,7 +53,8 @@ if "%SRC%"=="" (
 echo       Source: %SRC%
 
 echo [3/6] Ap dung file moi (giu nguyen vertex-key.json + .env)...
-robocopy "%SRC%" . /E /XF "vertex-key.json" ".env" /XD ".github" "node_modules" "public\ffmpeg" /R:1 /W:1 /NP
+REM /MIR = mirror (force overwrite + delete extras). /XF preserves keys.
+robocopy "%SRC%" . /MIR /XF "vertex-key.json" ".env" ".update_version" /XD ".github" "node_modules" "public\ffmpeg" /R:1 /W:1 /NP
 set RC=%ERRORLEVEL%
 if %RC% GEQ 8 (
     echo [LOI] Robocopy that bai voi exit code %RC%.
@@ -61,10 +62,16 @@ if %RC% GEQ 8 (
     exit /b 1
 )
 
-REM Verify critical file
+REM Verify the copy actually applied — read APP_VERSION from disk
+for /f "tokens=2 delims='" %%a in ('findstr "APP_VERSION" src\version.js 2^>nul') do set APPLIED_VER=%%a
+echo       Phien ban tren dia sau update: %APPLIED_VER%
+
 if not exist "src\lib\templates\template2_raw.html" (
-    echo [CANH BAO] template2_raw.html VAN BI THIEU! Copy that bai.
-    echo            Vui long lien he anh Kei.
+    echo.
+    echo [LOI NGHIEM TRONG] template2_raw.html bi mat. UPDATE that bai.
+    echo   -^> Phuong an: tai zip moi tu anh Kei, giai nen DE LEN folder hien tai.
+    pause
+    exit /b 1
 )
 
 echo [4/6] Cap nhat dependencies (npm install)...
