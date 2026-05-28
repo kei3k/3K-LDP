@@ -51,7 +51,18 @@ echo "      Da tai: $(stat -f %z "$ZIP" 2>/dev/null || stat -c %s "$ZIP") bytes"
 echo "[2/6] Giai nen tam..."
 rm -rf "$EXTRACT"
 mkdir -p "$EXTRACT"
-unzip -q "$ZIP" -d "$EXTRACT"
+# macOS BSD unzip can't decode UTF-8 filenames (Vietnamese) → "Illegal byte sequence".
+# Use ditto on macOS (native, UTF-8 safe), unzip with LANG override elsewhere.
+if [[ "$OSTYPE" == "darwin"* ]] && command -v ditto &> /dev/null; then
+  ditto -x -k "$ZIP" "$EXTRACT"
+else
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 unzip -q "$ZIP" -d "$EXTRACT"
+fi
+if [ $? -ne 0 ]; then
+  echo "[LOI] Giai nen that bai. Xem log: $LOG"
+  read -p "An Enter de thoat..."
+  exit 1
+fi
 
 SRC=$(find "$EXTRACT" -maxdepth 1 -type d -name "3K-LDP-*" | head -1)
 if [ -z "$SRC" ]; then
