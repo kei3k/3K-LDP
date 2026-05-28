@@ -58,7 +58,11 @@ async function callVertexFlash(prompt) {
  * @param {(msg: string) => void} [onProgress]
  */
 export async function translateLandingHtml(html, targetLanguage, onProgress) {
-  if (!targetLanguage || targetLanguage === 'Tiếng Việt') return html;
+  // NOTE: Do NOT skip when target === 'Tiếng Việt'. Source may be Thai/EN/CN
+  // (e.g. dealmobi.click Thai landing) and customer chose VN as target.
+  // Let Gemini handle identity case (source==target) naturally — it returns
+  // the text unchanged when no translation is needed.
+  if (!targetLanguage) return html;
   onProgress?.(`🌐 Đang dịch sang ${targetLanguage} (Vertex ${MODEL})...`);
 
   // Strip noise

@@ -390,8 +390,10 @@ export default function LadiPageToPke() {
       }
       // ── End image translation ─────────────────────────────────────────────
 
-      // Translate text if target language != Vietnamese
-      if (language && language !== 'Tiếng Việt') {
+      // Always translate when a target language is picked — source may be Thai
+      // (dealmobi.click), Chinese, English… and customer wants VN output.
+      // translateLandingHtml itself handles identity (source==target) cheaply.
+      if (language) {
         html = await translateLandingHtml(html, language, setProgress);
       }
 
