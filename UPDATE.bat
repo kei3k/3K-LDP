@@ -62,9 +62,17 @@ if %RC% GEQ 8 (
     exit /b 1
 )
 
+REM Bake commit hash from GitHub API into src/version.js so badge shows real version
+REM (we have no .git folder, so vite.config.js can't run `git rev-parse`)
+echo [3.5/6] Lay commit hash tu GitHub va bake vao version.js...
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/%REPO%/branches/%BRANCH%' -TimeoutSec 15).commit.sha.Substring(0,7) } catch { 'dev' }"') do set COMMIT_SHA=%%i
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set BUILD_DT=%%i
+powershell -NoProfile -Command "(Get-Content src\version.js -Raw) -replace \": 'dev';\", \": '%COMMIT_SHA%';\" -replace \": new Date\\(\\)\\.toISOString\\(\\)\\.slice\\(0, 10\\);\", \": '%BUILD_DT%';\" | Set-Content -Path src\version.js -Encoding utf8"
+echo       Da bake commit=%COMMIT_SHA% date=%BUILD_DT%
+
 REM Verify the copy actually applied — read APP_VERSION from disk
 for /f "tokens=2 delims='" %%a in ('findstr "APP_VERSION" src\version.js 2^>nul') do set APPLIED_VER=%%a
-echo       Phien ban tren dia sau update: %APPLIED_VER%
+echo       Phien ban tren dia sau update: %APPLIED_VER% (%COMMIT_SHA%)
 
 if not exist "src\lib\templates\template2_raw.html" (
     echo.

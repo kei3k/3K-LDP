@@ -85,9 +85,24 @@ fi
 [ -f /tmp/_env.bak ] && cp -p /tmp/_env.bak .env
 rm -f /tmp/_vk.bak /tmp/_env.bak
 
+# ── Bake commit hash from GitHub API into src/version.js ─────────────
+# No .git folder on customer machines, so vite can't run `git rev-parse`.
+# Pull commit SHA from GitHub API and replace the 'dev' fallback in version.js.
+echo "[3.5/6] Lay commit hash tu GitHub..."
+COMMIT_SHA=$(curl -fsS --max-time 15 "https://api.github.com/repos/${REPO}/branches/${BRANCH}" 2>/dev/null | grep -oE '"sha":\s*"[a-f0-9]+"' | head -1 | grep -oE '[a-f0-9]+' | cut -c1-7)
+COMMIT_SHA=${COMMIT_SHA:-dev}
+BUILD_DT=$(date +%Y-%m-%d)
+# macOS/BSD sed needs -i '' (empty backup); use a tmp file for portability
+if [ -f src/version.js ]; then
+  sed -i.bak "s/: 'dev';/: '${COMMIT_SHA}';/" src/version.js 2>/dev/null
+  sed -i.bak "s/: new Date()\.toISOString()\.slice(0, 10);/: '${BUILD_DT}';/" src/version.js 2>/dev/null
+  rm -f src/version.js.bak
+fi
+echo "      Da bake commit=${COMMIT_SHA} date=${BUILD_DT}"
+
 # ── Verify the copy actually applied ──────────────────────────────
 APPLIED_VER=$(grep -oE "APP_VERSION\s*=\s*['\"]([0-9]+\.[0-9]+\.[0-9]+)" src/version.js 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-echo "      Phien ban tren dia sau update: ${APPLIED_VER:-(khong doc duoc)}"
+echo "      Phien ban tren dia sau update: ${APPLIED_VER:-(khong doc duoc)} (${COMMIT_SHA})"
 
 if [ ! -f "src/lib/templates/template2_raw.html" ]; then
   echo ""
