@@ -271,12 +271,34 @@ export default function LadiPageToPke() {
     setProgress('');
 
     try {
-      setProgress('🌐 Đang tải HTML từ URL...');
       const proxyUrl = `/api/fetch-url?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl);
-
-      if (!res.ok) {
-        throw new Error(`Không thể tải trang (${res.status})`);
+      // Retry up to 3 times: some hosts (Webcake CDN, Shopee) intermittently
+      // time out or block. Backoff 1.5s → 3s → final attempt.
+      const maxAttempts = 3;
+      let res = null;
+      let lastErr = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        setProgress(
+          attempt === 1
+            ? '🌐 Đang tải HTML từ URL...'
+            : `🔄 Server lag, đang thử lại lần ${attempt}/${maxAttempts}...`,
+        );
+        try {
+          res = await fetch(proxyUrl);
+          if (res.ok) break;
+          lastErr = new Error(`HTTP ${res.status}`);
+        } catch (netErr) {
+          lastErr = netErr;
+          res = null;
+        }
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+      if (!res || !res.ok) {
+        throw new Error(
+          `Không thể tải trang sau ${maxAttempts} lần thử. ${lastErr?.message || ''} — Server đích đang lag, anh thử lại sau 30 giây.`,
+        );
       }
 
       let html = await res.text();

@@ -1,29 +1,27 @@
 @echo off
-chcp 65001 >nul 2>&1
-title LDP Generator
-cd /d "%~dp0"
+chcp 65001 >nul
+title 3K-LDP AI Video Tool - Dang chay...
 
 echo.
-echo  ========================================
-echo   LDP Generator - Landing Page A/B Test
-echo  ========================================
+echo ========================================
+echo   3K-LDP AI VIDEO TOOL
+echo ========================================
 echo.
 
-where npm >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  [LOI] Khong tim thay npm. Hay cai dat Node.js truoc!
-    echo  Tai ve tai: https://nodejs.org/
+if not exist "node_modules" (
+    echo [LOI] Chua cai dat. Hay chay INSTALL.bat truoc.
+    echo.
     pause
     exit /b 1
 )
 
-if not exist "node_modules\" (
-    echo  Dang cai dat dependencies lan dau...
-    call npm install
-    echo.
-)
+echo Mo browser sau 3 giay...
+timeout /t 3 /nobreak >nul
+start http://localhost:5173
 
-echo  Dang khoi dong... (Ctrl+C de dung)
 echo.
+echo Tool dang chay. KHONG dong cua so nay khi su dung.
+echo Khi muon thoat, an Ctrl+C trong cua so nay roi dong.
+echo ----------------------------------------
+
 call npm run dev
-pause
