@@ -7,11 +7,21 @@ BRANCH="claude/hardcore-payne-74b124"
 REPO="kei3k/3K-LDP"
 ZIP="/tmp/3K-LDP-update.zip"
 EXTRACT="/tmp/3K-LDP-update"
+LOG="$(pwd)/update-log.txt"
+
+# Mirror everything to log file so friend can send it back if fail
+exec > >(tee -a "$LOG") 2>&1
+echo "============================================"
+echo "UPDATE LOG - $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Working dir: $(pwd)"
+echo "Branch: $BRANCH"
+echo "============================================"
 
 echo ""
 echo "========================================"
 echo "  UPDATE TOOL TU GITHUB"
 echo "========================================"
+echo "Log: $LOG"
 echo ""
 
 echo "[0/6] Dung Vite dev server cu (neu dang chay)..."
@@ -123,7 +133,9 @@ fi
 echo "[5/6] Luu version moi..."
 date "+%Y-%m-%d %H:%M" > .update_version
 
-echo "[6/6] Don dep..."
+echo "[6/6] Xoa cache Vite + don dep..."
+# Vite cache giu bundle CU - phai xoa de bundle moi co the lay tu source moi
+rm -rf node_modules/.vite .vite 2>/dev/null
 rm -rf "$EXTRACT" "$ZIP"
 
 echo ""
