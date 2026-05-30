@@ -1,62 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Mic, Download, AlertCircle } from 'lucide-react';
-
-// ─── Drag-drop file zone ──────────────────────────────────────────────────────
-
-function DropZone({ accept, label, hint, file, onFile }) {
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef(null);
-
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(f);
-  }
-
-  return (
-    <div
-      className={`relative rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 p-5 cursor-pointer transition-all min-h-[120px] ${
-        dragging
-          ? 'border-cyan-400 bg-cyan-500/10'
-          : file
-          ? 'border-cyan-500/50 bg-cyan-500/5'
-          : 'border-border hover:border-cyan-500/40 hover:bg-muted/30'
-      }`}
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
-      />
-      {file ? (
-        <div className="text-center">
-          <p className="text-xs font-semibold text-cyan-300 truncate max-w-[200px]">{file.name}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {(file.size / 1024 / 1024).toFixed(2)} MB
-          </p>
-          <p className="text-xs text-cyan-500 mt-1">Nhấn để đổi file</p>
-        </div>
-      ) : (
-        <>
-          <Upload size={24} className="text-muted-foreground" />
-          <p className="text-xs font-semibold text-foreground text-center">{label}</p>
-          {hint && <p className="text-xs text-muted-foreground text-center">{hint}</p>}
-        </>
-      )}
-    </div>
-  );
-}
+import { Mic, Download, AlertCircle } from 'lucide-react';
+import DropZone from './DropZone.jsx';
+import CloneTranscript from './CloneTranscript.jsx';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CloneVoice() {
+  const [mode, setMode] = useState('swap'); // 'swap' | 'transcript'
   const [videoFile, setVideoFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [audioTab, setAudioTab] = useState('upload'); // 'upload' | 'tts'
@@ -174,10 +124,37 @@ export default function CloneVoice() {
       <div className="flex items-center gap-2">
         <Mic size={18} className="text-cyan-400" />
         <h2 className="text-sm font-bold text-foreground">Clone Voice — Đổi giọng video</h2>
-        <span className="text-xs text-muted-foreground">
-          Giữ nguyên hình ảnh, thay thế toàn bộ âm thanh bằng giọng mới
-        </span>
       </div>
+
+      {/* Mode toggle */}
+      <div className="flex gap-1 p-1 rounded-xl bg-muted/40 border border-border">
+        <button
+          onClick={() => setMode('swap')}
+          className={`flex-1 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+            mode === 'swap' ? 'bg-cyan-500 text-white shadow' : 'text-muted-foreground hover:bg-muted/60'
+          }`}
+        >
+          🎙 Đổi giọng thủ công
+          <span className="block text-[10px] font-normal opacity-80">Có sẵn audio → swap ngay</span>
+        </button>
+        <button
+          onClick={() => setMode('transcript')}
+          className={`flex-1 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+            mode === 'transcript' ? 'bg-cyan-500 text-white shadow' : 'text-muted-foreground hover:bg-muted/60'
+          }`}
+        >
+          🌐 Dịch transcript → TTS
+          <span className="block text-[10px] font-normal opacity-80">Video Thái → Việt... khớp thời lượng</span>
+        </button>
+      </div>
+
+      {mode === 'transcript' && <CloneTranscript />}
+
+      {mode === 'swap' && (
+      <>
+      <p className="text-xs text-muted-foreground -mt-1">
+        Giữ nguyên hình ảnh, thay thế toàn bộ âm thanh bằng giọng mới
+      </p>
 
       {/* 2-column grid on wider screens, stacked on narrow */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -310,6 +287,8 @@ export default function CloneVoice() {
             Tải xuống video
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
