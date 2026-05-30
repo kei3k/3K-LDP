@@ -6,7 +6,8 @@ import {
   AZURE_VOICES_BY_LANG, AZURE_LANG_OPTIONS, PROVIDERS, ls, lsSet,
 } from '../../lib/tts/ttsCatalog.js';
 import {
-  transcribeVideo, translateSegments, synthesizeSegment, probeBlobDuration, assembleVideo,
+  transcribeVideo, translateSegments, fitTranslationLength, estimateSpokenSeconds,
+  synthesizeSegment, probeBlobDuration, assembleVideo,
 } from '../../lib/cloneTranscript.js';
 
 // Languages for source (transcript) + target (TTS script)
@@ -106,6 +107,20 @@ export default function CloneTranscript() {
       setSegments(translated.map((s) => ({ ...s, ttsDur: undefined, ratio: undefined })));
       setTtsDone(false); setChunkBlobs([]);
       setStatus(`Đã dịch ${translated.length} đoạn sang ${targetLang}.`);
+    } catch (e) {
+      setStatus(`Lỗi: ${e.message}`);
+    } finally { setLoading(false); setProgress(''); }
+  }, [segments, targetLang]);
+
+  // ── Step 2b: fit translation length to slots (before TTS) ──────────────────
+  const handleFitLength = useCallback(async () => {
+    if (!segments.some((s) => s.translated)) return;
+    setLoading(true); setStatus('');
+    try {
+      const fitted = await fitTranslationLength(segments, targetLang, setProgress);
+      setSegments(fitted.map((s) => ({ ...s, ttsDur: undefined, ratio: undefined })));
+      setTtsDone(false); setChunkBlobs([]);
+      setStatus('Đã tối ưu độ dài bản dịch cho khớp thời lượng. Kiểm tra cột "Dự kiến" rồi tạo giọng.');
     } catch (e) {
       setStatus(`Lỗi: ${e.message}`);
     } finally { setLoading(false); setProgress(''); }
@@ -233,8 +248,21 @@ export default function CloneTranscript() {
               >
                 <Languages size={13} /> Dịch sang {targetLang}
               </button>
+              <button
+                onClick={handleFitLength}
+                disabled={loading || !hasTranslation}
+                title="Rút gọn/nới bản dịch cho khớp thời lượng từng đoạn — làm TRƯỚC khi tạo giọng"
+                className="py-1.5 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/30 transition-all flex items-center gap-1.5 disabled:opacity-40"
+              >
+                ✨ Tối ưu độ dài
+              </button>
             </div>
           </div>
+          {hasTranslation && !ttsDone && (
+            <p className="text-[11px] text-amber-400/90 -mt-1">
+              💡 Nên bấm <b>✨ Tối ưu độ dài</b> để bản dịch vừa thời lượng trước khi tạo giọng — giọng sẽ khớp tự nhiên, đỡ phải tăng/giảm tốc sau. Cột <b>Dự kiến</b> cho biết câu nào còn dài.
+            </p>
+          )}
 
           <div className="overflow-x-auto max-h-[340px] overflow-y-auto rounded-lg border border-border">
             <table className="w-full text-xs">
@@ -244,6 +272,7 @@ export default function CloneTranscript() {
                   <th className="px-2 py-1.5 w-24">Thời gian</th>
                   <th className="px-2 py-1.5">Lời gốc</th>
                   <th className="px-2 py-1.5">Bản dịch (sửa được)</th>
+                  {hasTranslation && !ttsDone && <th className="px-2 py-1.5 w-20">Dự kiến</th>}
                   {ttsDone && <th className="px-2 py-1.5 w-16">Khớp</th>}
                 </tr>
               </thead>
@@ -268,6 +297,18 @@ export default function CloneTranscript() {
                           className="w-full min-w-[140px] rounded border border-border bg-background px-1.5 py-1 text-xs resize-y focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
                         />
                       </td>
+                      {hasTranslation && !ttsDone && (() => {
+                        const est = estimateSpokenSeconds(s.translated, targetLang);
+                        const over = est > segDur * 1.15;
+                        const under = est < segDur * 0.6;
+                        return (
+                          <td className="px-2 py-1.5 whitespace-nowrap">
+                            <span className={over ? 'text-amber-400 font-semibold' : under ? 'text-muted-foreground' : 'text-cyan-400'}>
+                              ≈{est.toFixed(1)}s {over ? '⚠️ dài' : under ? '↓' : '✓'}
+                            </span>
+                          </td>
+                        );
+                      })()}
                       {ttsDone && (
                         <td className="px-2 py-1.5 whitespace-nowrap">
                           {s.ratio ? (

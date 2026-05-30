@@ -309,6 +309,9 @@ export default function VideoPipelineHelp() {
 
           <Section emoji="🌐" title="Mode 'Dịch transcript → TTS' (dịch video)">
             <p className="text-sm mb-2">Toggle trong tab Clone Voice. Upload video (vd tiếng Thái) → tự tách lời thoại có timestamp → dịch (Thái↔Việt...) → tạo giọng mới → ghép lại khớp thời lượng.</p>
+            <Callout color="blue">
+              <b>✨ Tối ưu độ dài (ưu tiên làm trước):</b> sau khi dịch, bấm <b>"Tối ưu độ dài"</b> ở bước ② — Gemini rút gọn/nới mỗi câu dịch cho vừa thời lượng đoạn gốc. Cột <b>Dự kiến</b> báo câu nào còn dài (⚠️). Làm bước này TRƯỚC giúp giọng khớp tự nhiên ngay, đỡ phải tăng/giảm tốc nhiều ở bước ④. Vẫn sửa tay được trong bảng.
+            </Callout>
             <Callout color="amber">
               <b>3 cách đồng bộ thời lượng</b> (chọn ở bước ④):
               <ul className="list-disc pl-5 space-y-0.5 mt-1">

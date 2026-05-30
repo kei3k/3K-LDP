@@ -80,6 +80,71 @@ CHỈ JSON ARRAY.`;
   return out;
 }
 
+// ─── 2b. Fit translation length to each segment's time slot ──────────────────
+
+// Rough speaking rate (characters per second) per language — guides the budget.
+// Dense scripts (Thai/CJK) pack more meaning per glyph → lower CPS.
+const CPS = {
+  'Tiếng Việt': 15, 'English': 15, 'Bahasa Indonesia': 15,
+  'ภาษาไทย': 6.5, '中文': 5, '日本語': 7, '한국어': 9,
+};
+
+/** Estimate how many seconds `text` takes to speak in `lang`. */
+export function estimateSpokenSeconds(text, lang) {
+  const cps = CPS[lang] || 14;
+  const chars = (text || '').trim().length;
+  return chars / cps;
+}
+
+/**
+ * Rewrite each translated line so its spoken length ≈ the segment's slot,
+ * BEFORE TTS — the primary way to keep the new voice aligned with the original
+ * timing (so later tempo/video-speed tweaks are minimal). Condenses lines that
+ * would overflow, gently pads ones that are too short. Meaning preserved.
+ *
+ * @param {{start,end,text,translated}[]} segments
+ * @param {string} targetLang
+ * @param {(msg:string)=>void} [onProgress]
+ */
+export async function fitTranslationLength(segments, targetLang, onProgress) {
+  if (!segments.length) return segments;
+  const cps = CPS[targetLang] || 14;
+  const CHUNK = 20;
+  const out = segments.map((s) => ({ ...s }));
+
+  for (let i = 0; i < segments.length; i += CHUNK) {
+    const slice = segments.slice(i, i + CHUNK);
+    onProgress?.(`✨ Tối ưu độ dài ${i + 1}-${Math.min(i + CHUNK, segments.length)}/${segments.length}...`);
+    const rows = slice.map((s, k) => {
+      const slot = Math.max(0.3, s.end - s.start);
+      const budget = Math.max(4, Math.round(slot * cps)); // soft character budget
+      return `${k}: slot=${slot.toFixed(1)}s (~${budget} ký tự) | hiện tại: "${(s.translated || s.text).replace(/"/g, '\\"')}"`;
+    }).join('\n');
+
+    const prompt = `Viết lại ${slice.length} câu thoại bằng ${targetLang} sao cho khi ĐỌC TO mất xấp xỉ đúng "slot" giây của mỗi câu (bám theo số ký tự gợi ý). Giữ NGUYÊN ý nghĩa + văn phong quảng cáo tự nhiên. Câu dài quá thì rút gọn (bỏ từ thừa, không bịa thêm ý). Câu ngắn quá thì thêm từ đệm tự nhiên, KHÔNG đổi nghĩa. Giữ số + đơn vị + tên sản phẩm.
+
+${rows}
+
+Trả về JSON array đúng ${slice.length} phần tử theo thứ tự:
+[{"i":0,"t":"<câu đã chỉnh độ dài>"}, ...]
+CHỈ JSON ARRAY.`;
+
+    let arr = [];
+    try {
+      const text = await callVertex(prompt);
+      const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      arr = JSON.parse(clean.match(/\[[\s\S]*\]/)?.[0] || clean);
+    } catch {
+      arr = []; // keep originals on failure
+    }
+    for (const item of arr) {
+      const k = Number(item.i);
+      if (Number.isInteger(k) && slice[k] && item.t) out[i + k].translated = String(item.t).trim();
+    }
+  }
+  return out;
+}
+
 async function callVertex(prompt) {
   const resp = await fetch(`/api/vertex/models/${TRANSLATE_MODEL}:generateContent`, {
     method: 'POST',
