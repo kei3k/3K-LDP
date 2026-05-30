@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { generateGeminiTTS, generateElevenLabs, generateOpenAI, generateAzure } from '../lib/tts/ttsProviders.js';
 import {
-  GEMINI_VOICES, GEMINI_MODELS, ELEVENLABS_VOICES, OPENAI_VOICES,
+  GEMINI_VOICES, GEMINI_MODELS, ELEVENLABS_VOICES, ELEVENLABS_MODELS, OPENAI_VOICES,
   AZURE_VOICES_BY_LANG, AZURE_LANG_OPTIONS, PROVIDERS, ls, lsSet,
 } from '../lib/tts/ttsCatalog.js';
 
@@ -25,6 +25,8 @@ export default function TTSTab() {
 
   // ElevenLabs config
   const [elVoiceId, setElVoiceId] = useState(() => ls('tts_el_voice', ELEVENLABS_VOICES[0].id));
+  const [elCustomVoice, setElCustomVoice] = useState(() => ls('tts_el_custom_voice', ''));
+  const [elModel, setElModel] = useState(() => ls('tts_el_model', 'eleven_flash_v2_5'));
   const [elKey, setElKey] = useState(() => ls('tts_elevenlabs_key', ''));
 
   // OpenAI config
@@ -80,7 +82,12 @@ export default function TTSTab() {
         blob = await generateGeminiTTS({ text, voice: geminiVoice, model: geminiModel });
         setAudioBlobType('audio/wav');
       } else if (provider === 'elevenlabs') {
-        blob = await generateElevenLabs({ text, voiceId: elVoiceId, apiKey: elKey });
+        blob = await generateElevenLabs({
+          text,
+          voiceId: elCustomVoice.trim() || elVoiceId,
+          apiKey: elKey,
+          model: elModel,
+        });
         setAudioBlobType('audio/mpeg');
       } else if (provider === 'openai') {
         blob = await generateOpenAI({ text, voice: oaiVoice, apiKey: oaiKey });
@@ -99,7 +106,7 @@ export default function TTSTab() {
     } finally {
       setLoading(false);
     }
-  }, [provider, text, geminiVoice, geminiModel, elVoiceId, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion]);
+  }, [provider, text, geminiVoice, geminiModel, elVoiceId, elCustomVoice, elModel, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion]);
 
   function handleDownload() {
     if (!audioBlobRef.current || !audioUrl) return;
@@ -195,14 +202,42 @@ export default function TTSTab() {
         {provider === 'elevenlabs' && (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Giọng đọc</label>
+              <label className="text-xs text-muted-foreground">
+                Model <span className="text-cyan-400">(quyết định ngôn ngữ nói được)</span>
+              </label>
+              <select
+                value={elModel}
+                onChange={(e) => { setElModel(e.target.value); lsSet('tts_el_model', e.target.value); }}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              >
+                {ELEVENLABS_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+              <p className="text-[11px] text-amber-400">
+                Tiếng Thái → chọn <b>v3</b>. Tiếng Việt → <b>v3</b> hoặc <b>Flash v2.5</b>.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Giọng đọc (preset)</label>
               <select
                 value={elVoiceId}
                 onChange={(e) => { setElVoiceId(e.target.value); lsSet('tts_el_voice', e.target.value); }}
-                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                disabled={!!elCustomVoice.trim()}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50"
               >
                 {ELEVENLABS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
               </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">
+                Custom Voice ID <span className="text-cyan-400">(paste giọng Thái/Việt từ Voice Library)</span>
+              </label>
+              <input
+                type="text"
+                value={elCustomVoice}
+                onChange={(e) => { setElCustomVoice(e.target.value); lsSet('tts_el_custom_voice', e.target.value); }}
+                placeholder="VD: 21m00Tcm4TlvDq8ikWAM (ưu tiên hơn preset nếu điền)"
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">
@@ -217,7 +252,7 @@ export default function TTSTab() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Guest mode giới hạn ~10.000 ký tự/tháng theo IP.
+              Guest mode giới hạn ~10.000 ký tự/tháng theo IP. Cách lấy Voice ID Thái/Việt: xem tab Hướng dẫn.
             </p>
           </div>
         )}

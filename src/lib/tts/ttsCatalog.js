@@ -16,6 +16,17 @@ export const GEMINI_MODELS = [
   { value: 'gemini-2.5-pro-tts',   label: 'Pro (chất lượng cao)' },
 ];
 
+// Model picks which languages ElevenLabs can speak:
+//   multilingual_v2 → 29 langs, KHÔNG có Thái/Việt
+//   flash_v2_5 / turbo_v2_5 → +Việt (vẫn không Thái)
+//   eleven_v3 → 70+ langs, có cả Thái + Việt
+export const ELEVENLABS_MODELS = [
+  { value: 'eleven_v3',             label: 'v3 — Thái + Việt + 70 ngôn ngữ (tốt nhất)' },
+  { value: 'eleven_flash_v2_5',     label: 'Flash v2.5 — có Việt, nhanh (KHÔNG Thái)' },
+  { value: 'eleven_turbo_v2_5',     label: 'Turbo v2.5 — có Việt (KHÔNG Thái)' },
+  { value: 'eleven_multilingual_v2', label: 'Multilingual v2 — KHÔNG Thái/Việt' },
+];
+
 export const ELEVENLABS_VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel (Nữ, Mỹ)' },
   { id: 'pNInz6obpgDQGcFmaJgB', label: 'Adam (Nam, Mỹ)' },

@@ -113,7 +113,12 @@ export async function synthesizeSegment(text, cfg) {
     case 'gemini':
       return generateGeminiTTS({ text, voice: cfg.geminiVoice, model: cfg.geminiModel });
     case 'elevenlabs':
-      return generateElevenLabs({ text, voiceId: cfg.elVoiceId, apiKey: cfg.elKey });
+      return generateElevenLabs({
+        text,
+        voiceId: (cfg.elCustomVoice || '').trim() || cfg.elVoiceId,
+        apiKey: cfg.elKey,
+        model: cfg.elModel,
+      });
     case 'openai':
       return generateOpenAI({ text, voice: cfg.oaiVoice, apiKey: cfg.oaiKey });
     case 'azure':

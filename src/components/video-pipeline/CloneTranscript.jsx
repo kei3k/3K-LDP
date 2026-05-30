@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Languages, Wand2, FileAudio, Download, AlertCircle, Mic } from 'lucide-react';
 import DropZone from './DropZone.jsx';
 import {
-  GEMINI_VOICES, GEMINI_MODELS, ELEVENLABS_VOICES, OPENAI_VOICES,
+  GEMINI_VOICES, GEMINI_MODELS, ELEVENLABS_VOICES, ELEVENLABS_MODELS, OPENAI_VOICES,
   AZURE_VOICES_BY_LANG, AZURE_LANG_OPTIONS, PROVIDERS, ls, lsSet,
 } from '../../lib/tts/ttsCatalog.js';
 import {
@@ -54,6 +54,8 @@ export default function CloneTranscript() {
   const [geminiVoice, setGeminiVoice] = useState(() => ls('tts_gemini_voice', 'Kore'));
   const [geminiModel, setGeminiModel] = useState(() => ls('tts_gemini_model', 'gemini-2.5-flash-tts'));
   const [elVoiceId, setElVoiceId] = useState(() => ls('tts_el_voice', ELEVENLABS_VOICES[0].id));
+  const [elCustomVoice, setElCustomVoice] = useState(() => ls('tts_el_custom_voice', ''));
+  const [elModel, setElModel] = useState(() => ls('tts_el_model', 'eleven_flash_v2_5'));
   const [elKey, setElKey] = useState(() => ls('tts_elevenlabs_key', ''));
   const [oaiVoice, setOaiVoice] = useState(() => ls('tts_oai_voice', 'alloy'));
   const [oaiKey, setOaiKey] = useState(() => ls('tts_openai_key', ''));
@@ -63,7 +65,7 @@ export default function CloneTranscript() {
   const [azRegion, setAzRegion] = useState(() => ls('tts_azure_region', 'southeastasia'));
 
   function ttsConfig() {
-    return { provider, geminiVoice, geminiModel, elVoiceId, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion };
+    return { provider, geminiVoice, geminiModel, elVoiceId, elCustomVoice, elModel, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion };
   }
 
   // ── Video duration ──────────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ export default function CloneTranscript() {
     } catch (e) {
       setStatus(`Lỗi: ${e.message}`);
     } finally { setLoading(false); setProgress(''); }
-  }, [segments, provider, geminiVoice, geminiModel, elVoiceId, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion]);
+  }, [segments, provider, geminiVoice, geminiModel, elVoiceId, elCustomVoice, elModel, elKey, oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion]);
 
   // ── Step 4: assemble ─────────────────────────────────────────────────────────
   const handleAssemble = useCallback(async () => {
@@ -315,10 +317,19 @@ export default function CloneTranscript() {
           )}
           {provider === 'elevenlabs' && (
             <div className="flex flex-col gap-2">
-              <select value={elVoiceId} onChange={(e) => { setElVoiceId(e.target.value); lsSet('tts_el_voice', e.target.value); }}
+              <select value={elModel} onChange={(e) => { setElModel(e.target.value); lsSet('tts_el_model', e.target.value); }}
                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs">
+                {ELEVENLABS_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+              <p className="text-[11px] text-amber-400">Thái → chọn <b>v3</b>. Việt → <b>v3</b> hoặc <b>Flash v2.5</b>.</p>
+              <select value={elVoiceId} onChange={(e) => { setElVoiceId(e.target.value); lsSet('tts_el_voice', e.target.value); }}
+                disabled={!!elCustomVoice.trim()}
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs disabled:opacity-50">
                 {ELEVENLABS_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
               </select>
+              <input type="text" value={elCustomVoice} onChange={(e) => { setElCustomVoice(e.target.value); lsSet('tts_el_custom_voice', e.target.value); }}
+                placeholder="Custom Voice ID (paste giọng Thái/Việt từ Voice Library)"
+                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" />
               <input type="password" value={elKey} onChange={(e) => { setElKey(e.target.value); lsSet('tts_elevenlabs_key', e.target.value); }}
                 placeholder="API key (để trống = guest mode)"
                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" />

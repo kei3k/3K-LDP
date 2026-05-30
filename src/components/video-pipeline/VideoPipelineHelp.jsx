@@ -344,9 +344,26 @@ export default function VideoPipelineHelp() {
               <ul className="list-disc pl-5 space-y-1">
                 <li><b>Guest mode</b>: KHÔNG cần API key — giới hạn ~10,000 chars/tháng theo IP, dùng được ngay</li>
                 <li><b>Paid mode</b>: paste API key vào ô → không giới hạn theo plan của anh</li>
-                <li>8 voice preset: Rachel, Adam, Bella, Antoni, Josh, Arnold, Sam, Elli</li>
+                <li>8 voice preset + ô <b>Custom Voice ID</b> để paste giọng bất kỳ</li>
                 <li>Giọng tự nhiên nhất trong 4 provider</li>
               </ul>
+              <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5">
+                <p className="font-bold text-amber-300 mb-1">⚠️ Chọn ĐÚNG model theo ngôn ngữ</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><b>Tiếng Thái</b> → bắt buộc model <b>v3</b> (chỉ v3 mới đọc được Thái)</li>
+                  <li><b>Tiếng Việt</b> → <b>v3</b> hoặc <b>Flash v2.5</b></li>
+                  <li><b>Multilingual v2</b> KHÔNG đọc được Thái/Việt (chỉ tiếng Anh + 27 ngôn ngữ khác)</li>
+                </ul>
+              </div>
+              <div className="mt-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-2.5">
+                <p className="font-bold text-yellow-300 mb-1">🔎 Lấy giọng Thái/Việt native (Custom Voice ID)</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li>Vào <b>elevenlabs.io</b> → <b>Voices</b> → <b>Voice Library</b></li>
+                  <li>Lọc theo Language = Thai / Vietnamese, nghe thử</li>
+                  <li>Bấm <b>Add</b> để thêm vào tài khoản → mở voice → copy <b>Voice ID</b></li>
+                  <li>Paste vào ô <b>Custom Voice ID</b> trong tool (ưu tiên hơn preset)</li>
+                </ol>
+              </div>
             </div>
           </details>
 
@@ -373,6 +390,17 @@ export default function VideoPipelineHelp() {
             </summary>
             <div className="px-4 pb-4 pt-2 text-xs text-foreground/85 leading-relaxed">
               <p className="mb-2">Cần API key + region. Free tier: <b>500,000 chars/tháng</b>.</p>
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-2.5 mb-2">
+                <p className="font-bold text-blue-300 mb-1">🔑 Cách lấy API Key + Region (miễn phí)</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li>Vào <b>portal.azure.com</b> → đăng nhập (tạo free account nếu chưa có)</li>
+                  <li>Bấm <b>Create a resource</b> → tìm <b>"Speech"</b> → chọn <b>Speech</b> (Azure AI services)</li>
+                  <li>Tạo resource: chọn Subscription, Resource group, <b>Region</b> (vd <b>southeastasia</b>), Pricing tier <b>Free F0</b></li>
+                  <li>Sau khi tạo xong → mở resource → mục <b>Keys and Endpoint</b></li>
+                  <li>Copy <b>KEY 1</b> → paste vào ô API Key; ghi nhớ <b>Location/Region</b> → điền vào ô Region</li>
+                </ol>
+                <p className="mt-1 text-blue-300/80">Region phải khớp đúng (vd southeastasia, eastus...) nếu không sẽ lỗi 401/403.</p>
+              </div>
               <div className="grid sm:grid-cols-2 gap-3 mt-2">
                 <div>
                   <p className="font-bold text-blue-300 mb-1">Giọng Tiếng Việt</p>

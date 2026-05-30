@@ -55,11 +55,13 @@ export async function generateGeminiTTS({ text, voice = 'Kore', model = 'gemini-
 // ─── ElevenLabs ──────────────────────────────────────────────────────────────
 
 /**
- * @param {{ text: string, voiceId: string, apiKey?: string }} opts
- * apiKey is optional — omit for guest (IP-limited) mode
+ * @param {{ text: string, voiceId: string, apiKey?: string, model?: string }} opts
+ * apiKey is optional — omit for guest (IP-limited) mode.
+ * model selects language coverage: eleven_v3 (Thai+Viet), eleven_flash_v2_5
+ * (Viet), eleven_multilingual_v2 (neither). Default flash_v2_5 = Viet + fast.
  * @returns {Promise<Blob>}  MP3 blob
  */
-export async function generateElevenLabs({ text, voiceId, apiKey = '' }) {
+export async function generateElevenLabs({ text, voiceId, apiKey = '', model = 'eleven_flash_v2_5' }) {
   const url = `https://api.us.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers['xi-api-key'] = apiKey;
@@ -67,7 +69,7 @@ export async function generateElevenLabs({ text, voiceId, apiKey = '' }) {
   const resp = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
+    body: JSON.stringify({ text, model_id: model }),
   });
 
   if (!resp.ok) {
