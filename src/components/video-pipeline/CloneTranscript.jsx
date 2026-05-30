@@ -46,6 +46,7 @@ export default function CloneTranscript() {
   const [progress, setProgress] = useState('');
   const [chunkBlobs, setChunkBlobs] = useState([]);
   const [ttsDone, setTtsDone] = useState(false);
+  const [syncMode, setSyncMode] = useState('voice'); // 'segment' | 'voice' | 'video'
   const [outputUrl, setOutputUrl] = useState(null);
   const outputBlobRef = useRef(null);
 
@@ -150,7 +151,7 @@ export default function CloneTranscript() {
     if (!ttsDone || !chunkBlobs.some(Boolean)) return;
     setLoading(true); setStatus('');
     try {
-      const blob = await assembleVideo(sidRef.current, segments, chunkBlobs, videoDuration, setProgress);
+      const blob = await assembleVideo(sidRef.current, segments, chunkBlobs, videoDuration, syncMode, setProgress);
       const url = URL.createObjectURL(blob);
       outputBlobRef.current = blob;
       setOutputUrl(url);
@@ -158,7 +159,7 @@ export default function CloneTranscript() {
     } catch (e) {
       setStatus(`Lỗi: ${e.message}`);
     } finally { setLoading(false); setProgress(''); }
-  }, [ttsDone, chunkBlobs, segments, videoDuration]);
+  }, [ttsDone, chunkBlobs, segments, videoDuration, syncMode]);
 
   function handleDownload() {
     if (!outputBlobRef.current || !outputUrl) return;
@@ -385,9 +386,28 @@ export default function CloneTranscript() {
       {ttsDone && (
         <div className="rounded-xl border border-border bg-muted/20 p-3 flex flex-col gap-3">
           <p className="text-xs font-bold text-cyan-400 uppercase tracking-wider">④ Ghép giọng vào video</p>
-          <p className="text-xs text-muted-foreground">
-            Mỗi đoạn giọng sẽ được tăng/giảm tốc nhẹ (atempo) để khớp đúng vị trí + thời lượng trong video gốc, rồi mux lại.
-          </p>
+
+          {/* Sync strategy */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">Cách đồng bộ thời lượng</label>
+            {[
+              { id: 'voice', title: '🎚 Đổi tốc GIỌNG toàn bộ', desc: 'Cả track giọng cùng 1 hệ số tốc → giọng đều, mượt. Vài đoạn lệch nhẹ. (Khuyến nghị)' },
+              { id: 'video', title: '🎞 Đổi tốc VIDEO toàn bộ', desc: 'Giữ giọng tự nhiên, làm nhanh/chậm khung hình cả video. Giọng tự nhiên nhất.' },
+              { id: 'segment', title: '✂️ Khớp từng đoạn', desc: 'Mỗi đoạn co giãn riêng → khớp chính xác nhất nhưng giọng lúc nhanh lúc chậm.' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setSyncMode(m.id)}
+                className={`text-left rounded-lg border p-2.5 transition-all ${
+                  syncMode === m.id ? 'border-cyan-500 bg-cyan-500/10' : 'border-border bg-muted/20 hover:border-cyan-500/40'
+                }`}
+              >
+                <p className={`text-xs font-bold ${syncMode === m.id ? 'text-cyan-300' : 'text-foreground'}`}>{m.title}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{m.desc}</p>
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={handleAssemble}
             disabled={loading}

@@ -526,10 +526,15 @@ Giữ nguyên ngôn ngữ gốc, KHÔNG dịch. CHỈ trả JSON array, không g
               if (!segments.length) throw new Error('Không có segment để ghép')
               await fs.access(videoPath)
 
-              // Build per-chunk filter: atempo (fit) + adelay (position) → labeled stream
-              const inputs = []          // ffmpeg -i args
-              const filterParts = []
-              const mixLabels = []
+              // Sync strategy:
+              //   'segment' — fit each clip to its own slot (tight sync, varying tempo)
+              //   'voice'   — one global tempo on the whole voice track (even voice)
+              //   'video'   — keep voice natural, stretch the WHOLE video to fit (setpts)
+              const mode = body.mode || 'segment'
+
+              // Collect valid chunks (in segment order) + probe durations.
+              const inputs = []           // ffmpeg -i args (one pair per chunk)
+              const valid = []            // { inIdx, measured, start, end }
               for (let k = 0; k < segments.length; k++) {
                 const seg = segments[k]
                 const chunkPath = ctChunk(id, seg.idx)
@@ -537,33 +542,58 @@ Giữ nguyên ngôn ngữ gốc, KHÔNG dịch. CHỈ trả JSON array, không g
                 try { await fs.access(chunkPath); measured = await probeDuration(chunkPath) } catch { continue }
                 if (!measured) continue
                 cleanup.push(chunkPath)
-                const target = Math.max(0.3, (seg.end - seg.start))
-                const ratio = measured / target            // >1 → speed up to fit
-                const factors = atempoChain(ratio)
-                const startMs = Math.max(0, Math.round(seg.start * 1000))
-                // ffmpeg input index = (# of -i flags before this one). Video is 0,
-                // each chunk adds one `-i path` pair → index = (inputs.length / 2) + 1.
-                const inIdx = (inputs.length / 2) + 1
+                const inIdx = valid.length + 1   // video is input 0
                 inputs.push('-i', chunkPath)
+                valid.push({ inIdx, measured, start: seg.start, end: seg.end })
+              }
+              const N = valid.length
+              if (!N) throw new Error('Không có audio chunk hợp lệ')
+
+              const totalVoice = valid.reduce((s, v) => s + v.measured, 0)
+              const leadMs = Math.max(0, Math.round(valid[0].start * 1000))
+              // Normalize every chunk to a common format so concat/amix never fail.
+              const norm = valid.map((v, j) => `[${v.inIdx}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[n${j}]`)
+              const concatLabel = N === 1 ? '[n0]anull[cat]' : `${valid.map((_, j) => `[n${j}]`).join('')}concat=n=${N}:v=0:a=1[cat]`
+
+              let filterComplex, args
+              if (mode === 'voice') {
+                // One uniform atempo so the full narration fits the video length.
+                const factors = atempoChain(videoDuration > 0 ? totalVoice / videoDuration : 1)
                 const tempo = factors.map((f) => `atempo=${f}`).join(',')
-                filterParts.push(`[${inIdx}:a]${tempo},adelay=${startMs}:all=1[a${k}]`)
-                mixLabels.push(`[a${k}]`)
-              }
-              if (!mixLabels.length) throw new Error('Không có audio chunk hợp lệ')
-
-              let filterComplex
-              if (mixLabels.length === 1) {
-                filterComplex = filterParts[0].replace(/\[a0\]$/, '[aout]')
+                const aout = `[cat]${tempo}${leadMs ? `,adelay=${leadMs}:all=1` : ''}[aout]`
+                filterComplex = [...norm, concatLabel, aout].join(';')
+                args = ['-y', '-i', videoPath, ...inputs, '-filter_complex', filterComplex,
+                  '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k']
+                if (videoDuration > 0) args.push('-t', String(videoDuration))
+                args.push('-movflags', '+faststart', outPath)
+              } else if (mode === 'video') {
+                // Keep voice natural; stretch the whole video uniformly to match it.
+                let vf = videoDuration > 0 ? totalVoice / videoDuration : 1
+                vf = Math.max(0.5, Math.min(2.5, vf))
+                const vpart = `[0:v]setpts=${vf.toFixed(5)}*PTS[v]`
+                const aout = `[cat]${leadMs ? `adelay=${leadMs}:all=1,` : ''}anull[aout]`
+                filterComplex = [...norm, concatLabel, vpart, aout].join(';')
+                args = ['-y', '-i', videoPath, ...inputs, '-filter_complex', filterComplex,
+                  '-map', '[v]', '-map', '[aout]',
+                  '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+                  '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', outPath]
               } else {
-                filterComplex = filterParts.join(';') + `;${mixLabels.join('')}amix=inputs=${mixLabels.length}:normalize=0:dropout_transition=0[aout]`
+                // 'segment' (default): atempo-fit each clip to its slot, delay, amix.
+                const segParts = valid.map((v, j) => {
+                  const target = Math.max(0.3, v.end - v.start)
+                  const factors = atempoChain(v.measured / target)
+                  const startMs = Math.max(0, Math.round(v.start * 1000))
+                  return `[n${j}]${factors.map((f) => `atempo=${f}`).join(',')},adelay=${startMs}:all=1[a${j}]`
+                })
+                const mix = N === 1
+                  ? '[a0]anull[aout]'
+                  : `${valid.map((_, j) => `[a${j}]`).join('')}amix=inputs=${N}:normalize=0:dropout_transition=0[aout]`
+                filterComplex = [...norm, ...segParts, mix].join(';')
+                args = ['-y', '-i', videoPath, ...inputs, '-filter_complex', filterComplex,
+                  '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k']
+                if (videoDuration > 0) args.push('-t', String(videoDuration))
+                args.push('-movflags', '+faststart', outPath)
               }
-
-              const args = ['-y', '-i', videoPath, ...inputs,
-                '-filter_complex', filterComplex,
-                '-map', '0:v', '-map', '[aout]',
-                '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k']
-              if (videoDuration > 0) args.push('-t', String(videoDuration))
-              args.push('-movflags', '+faststart', outPath)
 
               let stderr = ''
               await new Promise((resolve, reject) => {
@@ -574,7 +604,7 @@ Giữ nguyên ngôn ngữ gốc, KHÔNG dịch. CHỈ trả JSON array, không g
               })
 
               const outBuf = await fs.readFile(outPath)
-              console.log(`[CloneTx/assemble] Output: ${outBuf.length} bytes, ${mixLabels.length} chunks`)
+              console.log(`[CloneTx/assemble] mode=${mode} Output: ${outBuf.length} bytes, ${N} chunks`)
               res.statusCode = 200
               res.setHeader('Content-Type', 'video/mp4')
               res.setHeader('Content-Length', outBuf.length)

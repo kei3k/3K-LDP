@@ -306,6 +306,18 @@ export default function VideoPipelineHelp() {
             </Callout>
             <p className="mt-2 text-sm">Use case điển hình: video tiếng Việt → dùng Azure TTS tạo giọng Thai → swap audio → ra video tiếng Thái.</p>
           </Section>
+
+          <Section emoji="🌐" title="Mode 'Dịch transcript → TTS' (dịch video)">
+            <p className="text-sm mb-2">Toggle trong tab Clone Voice. Upload video (vd tiếng Thái) → tự tách lời thoại có timestamp → dịch (Thái↔Việt...) → tạo giọng mới → ghép lại khớp thời lượng.</p>
+            <Callout color="amber">
+              <b>3 cách đồng bộ thời lượng</b> (chọn ở bước ④):
+              <ul className="list-disc pl-5 space-y-0.5 mt-1">
+                <li><b>Đổi tốc GIỌNG toàn bộ</b> — cả giọng cùng 1 hệ số → giọng đều, mượt; vài đoạn lệch nhẹ. <u>Khuyến nghị.</u></li>
+                <li><b>Đổi tốc VIDEO toàn bộ</b> — giữ giọng tự nhiên, làm nhanh/chậm khung hình cả video (re-encode).</li>
+                <li><b>Khớp từng đoạn</b> — chính xác từng câu nhưng giọng lúc nhanh lúc chậm (có thể khập khiễng).</li>
+              </ul>
+            </Callout>
+          </Section>
         </section>
 
         {/* ═══════════════════════════════════════════════════

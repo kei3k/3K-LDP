@@ -158,7 +158,7 @@ export function probeBlobDuration(blob) {
  * @param {(msg:string)=>void} [onProgress]
  * @returns {Promise<Blob>} output mp4
  */
-export async function assembleVideo(sid, segments, chunkBlobs, videoDuration, onProgress) {
+export async function assembleVideo(sid, segments, chunkBlobs, videoDuration, mode, onProgress) {
   const timing = [];
   for (let i = 0; i < segments.length; i++) {
     const blob = chunkBlobs[i];
@@ -178,7 +178,7 @@ export async function assembleVideo(sid, segments, chunkBlobs, videoDuration, on
   const resp = await fetch(`/api/clone-tx/assemble?id=${sid}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ segments: timing, videoDuration }),
+    body: JSON.stringify({ segments: timing, videoDuration, mode: mode || 'segment' }),
   });
   if (!resp.ok) throw new Error(`Ghép video lỗi: ${await resp.text()}`);
   return resp.blob();
