@@ -122,12 +122,16 @@ export default function CloneTranscript() {
         const txt = (segments[i].translated || segments[i].text).trim();
         if (!txt) continue;
         setProgress(`🔊 Tạo giọng đoạn ${i + 1}/${segments.length}...`);
-        const blob = await synthesizeSegment(txt, cfg);
+        const blob = await synthesizeSegment(txt, cfg, (msg) => setProgress(`(${i + 1}/${segments.length}) ${msg}`));
         const dur = await probeBlobDuration(blob);
         const segDur = Math.max(0.3, segments[i].end - segments[i].start);
         blobs[i] = blob;
         next[i].ttsDur = dur;
         next[i].ratio = dur / segDur;
+        // Gentle pacing for Gemini's low per-minute quota (other providers ~instant)
+        if (cfg.provider === 'gemini' && i < segments.length - 1) {
+          await new Promise((r) => setTimeout(r, 1200));
+        }
       }
       setChunkBlobs(blobs);
       setSegments(next);

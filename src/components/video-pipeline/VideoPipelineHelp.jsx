@@ -317,6 +317,16 @@ export default function VideoPipelineHelp() {
             Chuyển văn bản thành giọng nói qua 4 provider. Chọn provider bằng chip segment ở top tab TTS.
           </p>
 
+          <Callout color="amber">
+            <b>🇹🇭 Tiếng Thái nên dùng gì?</b>
+            <ul className="list-disc pl-5 space-y-0.5 mt-1">
+              <li><b>Azure</b> (th-TH-*) — giọng native chuẩn nhất, quota cao (500k chars/tháng free). <u>Khuyến nghị cho Thái.</u></li>
+              <li><b>Gemini</b> — đọc được Thái (auto-detect từ chữ, voice chỉ là chất giọng) nhưng <b>quota/phút thấp</b> → lỗi 429 khi tạo nhiều đoạn. Tool đã tự chờ + thử lại; nếu nhiều đoạn nên đổi sang Azure.</li>
+              <li><b>ElevenLabs</b> — phải chọn model <b>v3</b> mới có Thái.</li>
+              <li><b>OpenAI</b> — đọc Thái tạm được, không tự nhiên bằng Azure.</li>
+            </ul>
+          </Callout>
+
           {/* Gemini */}
           <details className="mb-3 rounded-xl border border-cyan-500/30 bg-cyan-500/5">
             <summary className="px-4 py-3 cursor-pointer font-bold text-cyan-300 text-sm hover:bg-cyan-500/10 transition-colors flex items-center gap-2">

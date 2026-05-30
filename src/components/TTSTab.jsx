@@ -79,7 +79,7 @@ export default function TTSTab() {
     try {
       let blob;
       if (provider === 'gemini') {
-        blob = await generateGeminiTTS({ text, voice: geminiVoice, model: geminiModel });
+        blob = await generateGeminiTTS({ text, voice: geminiVoice, model: geminiModel, onProgress: setStatus });
         setAudioBlobType('audio/wav');
       } else if (provider === 'elevenlabs') {
         blob = await generateElevenLabs({

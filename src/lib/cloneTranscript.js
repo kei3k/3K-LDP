@@ -108,10 +108,10 @@ async function callVertex(prompt) {
  *                          oaiVoice, oaiKey, azVoice, azLang, azKey, azRegion }
  * @returns {Promise<Blob>}
  */
-export async function synthesizeSegment(text, cfg) {
+export async function synthesizeSegment(text, cfg, onProgress) {
   switch (cfg.provider) {
     case 'gemini':
-      return generateGeminiTTS({ text, voice: cfg.geminiVoice, model: cfg.geminiModel });
+      return generateGeminiTTS({ text, voice: cfg.geminiVoice, model: cfg.geminiModel, onProgress });
     case 'elevenlabs':
       return generateElevenLabs({
         text,

@@ -14,27 +14,35 @@ import { pcmToWav } from './pcmToWav.js';
  * model: 'gemini-2.5-flash-tts' | 'gemini-2.5-pro-tts'
  * @returns {Promise<Blob>}  WAV blob (24kHz mono 16-bit)
  */
-export async function generateGeminiTTS({ text, voice = 'Kore', model = 'gemini-2.5-flash-tts' }) {
-  const resp = await fetch(`/api/vertex/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voice },
-          },
-        },
-      },
-    }),
+export async function generateGeminiTTS({ text, voice = 'Kore', model = 'gemini-2.5-flash-tts', onProgress }) {
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+    },
   });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
+  // Gemini TTS has a low per-minute quota. On 429, wait (honoring the server's
+  // retryDelay when present) and retry instead of failing the whole batch.
+  const MAX_RETRY = 4;
+  let resp, errText = '';
+  for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+    resp = await fetch(`/api/vertex/models/${model}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    });
+    if (resp.ok) break;
+    errText = await resp.text();
+    if (resp.status === 429 && attempt < MAX_RETRY) {
+      const m = /retryDelay"?\s*:\s*"?(\d+)s/.exec(errText);
+      const waitSec = m ? Math.min(60, parseInt(m[1], 10) + 1) : 15 * (attempt + 1);
+      onProgress?.(`⏳ Gemini quota — chờ ${waitSec}s rồi thử lại (${attempt + 1}/${MAX_RETRY})...`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
+    }
     throw new Error(`Gemini TTS lỗi (${resp.status}): ${errText.substring(0, 200)}`);
   }
+  if (!resp.ok) throw new Error(`Gemini TTS lỗi (${resp.status}): ${errText.substring(0, 200)}`);
 
   const data = await resp.json();
   const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
