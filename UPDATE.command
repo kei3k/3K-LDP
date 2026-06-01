@@ -73,38 +73,50 @@ fi
 echo "      Source: $SRC"
 
 echo "[3/6] Ap dung file moi (giu nguyen vertex-key.json + .env)..."
-# Backup keys
+
+# ── PRE-FLIGHT: source phai DAY DU truoc khi dung vao folder hien tai. ──
+# Neu tai loi / giai nen thieu -> THOAT, KHONG xoa/sua gi cua khach.
+if [ ! -f "$SRC/src/lib/templates/template2_raw.html" ] || [ ! -f "$SRC/vite.config.js" ] || [ ! -f "$SRC/package.json" ]; then
+  echo "[LOI] Source tai ve bi THIEU FILE (tai loi hoac mang chan)."
+  echo "  -> Folder hien tai KHONG bi thay doi. Hay chay lai UPDATE, hoac tai zip moi tu anh Kei."
+  read -p "An Enter de thoat..."
+  exit 1
+fi
+
+# Backup keys (phong khi)
 [ -f vertex-key.json ] && cp -p vertex-key.json /tmp/_vk.bak
 [ -f .env ] && cp -p .env /tmp/_env.bak
 
-# Strip node_modules + public/ffmpeg from source before copy (large + regenerable)
+# Strip large regenerable dirs from SOURCE so they're not copied
 rm -rf "$SRC/node_modules" "$SRC/public/ffmpeg" "$SRC/.github" 2>/dev/null
-
-# Fix file permissions so cp can overwrite (some users have read-only legacy files)
 chmod -R u+w . 2>/dev/null
 
-# Copy ALL files from SRC into current folder.
-# Use rsync if available (most reliable, force overwrites), else fallback to cp+ditto+find.
-echo "      Copying files..."
-if command -v rsync &> /dev/null; then
-  rsync -a --force --delete-after \
+# ── COPY AN TOAN: ghi de + GIU file cu (KHONG --delete, KHONG rm). ──
+# Mat file la khong the chap nhan; file thua lingering thi vo hai.
+echo "      Copying files (an toan, khong xoa)..."
+COPY_OK=0
+if command -v ditto &> /dev/null; then
+  ditto "$SRC" ./ && COPY_OK=1          # macOS native: overwrite, keep extras
+elif command -v rsync &> /dev/null; then
+  rsync -a --force \
     --exclude='vertex-key.json' --exclude='.env' \
     --exclude='node_modules' --exclude='public/ffmpeg' \
     --exclude='.git' --exclude='.update_version' \
-    "$SRC/" ./
-elif command -v ditto &> /dev/null; then
-  # macOS native — overwrites everything
-  ditto "$SRC" ./
+    "$SRC/" ./ && COPY_OK=1
 else
-  # Pure cp fallback. Remove old src/ first so stale files don't linger.
-  rm -rf src scripts public 2>/dev/null
-  cp -Rfp "$SRC/." ./ 2>&1 | tail -3
+  cp -Rf "$SRC/." ./ && COPY_OK=1
 fi
 
 # Restore keys
 [ -f /tmp/_vk.bak ] && cp -p /tmp/_vk.bak vertex-key.json
 [ -f /tmp/_env.bak ] && cp -p /tmp/_env.bak .env
 rm -f /tmp/_vk.bak /tmp/_env.bak
+
+# Verify copy actually landed the key file; if not, restore from the downloaded source.
+if [ "$COPY_OK" != "1" ] || [ ! -f "src/lib/templates/template2_raw.html" ]; then
+  echo "[CANH BAO] Copy chinh khong hoan tat — dang khoi phuc tu source da tai..."
+  cp -Rf "$SRC/." ./ 2>/dev/null
+fi
 
 # ── Bake commit hash from GitHub API into src/version.js ─────────────
 # No .git folder on customer machines, so vite can't run `git rev-parse`.

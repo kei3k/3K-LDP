@@ -72,14 +72,28 @@ if "%SRC%"=="" (
 echo       Source: %SRC%
 echo       Extracted to: %SRC% >> "%LOG%"
 
+REM PRE-FLIGHT: source phai DAY DU truoc khi dung vao folder hien tai
+if not exist "%SRC%\src\lib\templates\template2_raw.html" goto :src_incomplete
+if not exist "%SRC%\vite.config.js" goto :src_incomplete
+if not exist "%SRC%\package.json" goto :src_incomplete
+goto :src_ok
+:src_incomplete
+echo [LOI] Source tai ve bi THIEU FILE (tai loi / mang chan).
+echo       Folder hien tai KHONG bi thay doi. Chay lai UPDATE hoac tai zip moi.
+echo CRITICAL: source incomplete, aborting before touching dest >> "%LOG%"
+pause
+exit /b 1
+:src_ok
+
 echo [3/7] Tat thuoc tinh read-only (neu co)...
 attrib -R -S -H "src\*" /S /D >nul 2>&1
 attrib -R -S -H "scripts\*" /S /D >nul 2>&1
 
-echo [4/7] Ap dung file moi (giu nguyen vertex-key.json + .env)...
-echo [4/7] Robocopy /MIR... >> "%LOG%"
-REM /MIR = mirror. /R:3 retry 3 times, /W:2 wait 2s between retries.
-robocopy "%SRC%" . /MIR /XF "vertex-key.json" ".env" ".update_version" "update-log.txt" /XD ".github" "node_modules" "public\ffmpeg" /R:3 /W:2 /NP >> "%LOG%" 2>&1
+echo [4/7] Ap dung file moi (ghi de, GIU file cu - khong xoa)...
+echo [4/7] Robocopy /E (additive, no delete)... >> "%LOG%"
+REM /E = copy ke ca thu muc rong, GHI DE nhung KHONG xoa file thua (an toan,
+REM khong bao gio mat file). /R:3 retry, /W:2 wait.
+robocopy "%SRC%" . /E /XF "vertex-key.json" ".env" ".update_version" "update-log.txt" /XD ".github" "node_modules" "public\ffmpeg" /R:3 /W:2 /NP >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo       Robocopy exit code: %RC% >> "%LOG%"
 if %RC% GEQ 8 (
