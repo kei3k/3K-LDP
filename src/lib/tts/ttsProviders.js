@@ -70,9 +70,11 @@ export async function generateGeminiTTS({ text, voice = 'Kore', model = 'gemini-
  * @returns {Promise<Blob>}  MP3 blob
  */
 export async function generateElevenLabs({ text, voiceId, apiKey = '', model = 'eleven_flash_v2_5' }) {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('ElevenLabs cần API key. Đăng ký free tại elevenlabs.io (Profile → API Keys), dán key vào ô bên dưới. Hoặc dùng Gemini/Azure (không cần key ElevenLabs).');
+  }
   const url = `https://api.us.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (apiKey) headers['xi-api-key'] = apiKey;
+  const headers = { 'Content-Type': 'application/json', 'xi-api-key': apiKey.trim() };
 
   const resp = await fetch(url, {
     method: 'POST',

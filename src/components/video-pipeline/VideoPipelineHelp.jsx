@@ -367,8 +367,8 @@ export default function VideoPipelineHelp() {
             </summary>
             <div className="px-4 pb-4 pt-2 text-xs text-foreground/85 leading-relaxed space-y-1.5">
               <ul className="list-disc pl-5 space-y-1">
-                <li><b>Guest mode</b>: KHÔNG cần API key — giới hạn ~10,000 chars/tháng theo IP, dùng được ngay</li>
-                <li><b>Paid mode</b>: paste API key vào ô → không giới hạn theo plan của anh</li>
+                <li><b>BẮT BUỘC có API key</b> (không có chế độ dùng thử không key). Free tier ~10,000 chars/tháng.</li>
+                <li>Lấy key: đăng ký <b>elevenlabs.io</b> → bấm avatar → <b>API Keys</b> → Create → copy (dạng <code>xi-...</code>) → dán vào ô API Key</li>
                 <li>8 voice preset + ô <b>Custom Voice ID</b> để paste giọng bất kỳ</li>
                 <li>Giọng tự nhiên nhất trong 4 provider</li>
               </ul>

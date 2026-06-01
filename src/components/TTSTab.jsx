@@ -46,7 +46,7 @@ export default function TTSTab() {
 
   function providerReady(id) {
     if (id === 'gemini') return true;
-    if (id === 'elevenlabs') return true; // guest mode available
+    if (id === 'elevenlabs') return !!elKey;
     if (id === 'openai') return !!oaiKey;
     if (id === 'azure') return !!azKey;
     return false;
@@ -241,18 +241,18 @@ export default function TTSTab() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">
-                API Key <span className="text-cyan-400">(không bắt buộc — guest mode)</span>
+                API Key <span className="text-red-400">* (bắt buộc)</span>
               </label>
               <input
                 type="password"
                 value={elKey}
                 onChange={(e) => { setElKey(e.target.value); lsSet('tts_elevenlabs_key', e.target.value); }}
-                placeholder="sk-... (để trống dùng chế độ guest)"
+                placeholder="Dán ElevenLabs API key (xi-...)"
                 className="rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Guest mode giới hạn ~10.000 ký tự/tháng theo IP. Cách lấy Voice ID Thái/Việt: xem tab Hướng dẫn.
+              ElevenLabs <b>bắt buộc</b> có API key (free ~10k ký tự/tháng): đăng ký tại elevenlabs.io → Profile → API Keys. Cách lấy Voice ID Thái/Việt: xem tab Hướng dẫn.
             </p>
           </div>
         )}

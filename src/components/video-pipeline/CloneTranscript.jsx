@@ -377,7 +377,7 @@ export default function CloneTranscript() {
                 placeholder="Custom Voice ID (paste giọng Thái/Việt từ Voice Library)"
                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" />
               <input type="password" value={elKey} onChange={(e) => { setElKey(e.target.value); lsSet('tts_elevenlabs_key', e.target.value); }}
-                placeholder="API key (để trống = guest mode)"
+                placeholder="ElevenLabs API key * (bắt buộc — elevenlabs.io)"
                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" />
             </div>
           )}
