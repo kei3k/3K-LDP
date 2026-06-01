@@ -11,6 +11,14 @@ import { randomUUID } from 'crypto'
 import { spawn, execSync } from 'child_process'
 import { tmpdir } from 'os'
 import { promises as fs } from 'fs'
+import ffmpegStatic from 'ffmpeg-static'
+import ffprobeStatic from 'ffprobe-static'
+
+// Bundled ffmpeg/ffprobe binaries (downloaded by npm install) so the tool works
+// without the customer installing ffmpeg system-wide. Fall back to PATH if the
+// static package is somehow missing.
+const FFMPEG_BIN = ffmpegStatic || 'ffmpeg'
+const FFPROBE_BIN = (ffprobeStatic && ffprobeStatic.path) || 'ffprobe'
 
 // Capture git commit hash + build date once per Vite process start
 function readGitCommit() {
@@ -241,7 +249,7 @@ export default defineConfig(({ mode }) => {
 
             // Run native ffmpeg: 480p, h264 fast, aac audio 64k, target ~10MB for 60s
             await new Promise((resolve, reject) => {
-              const ff = spawn('ffmpeg', [
+              const ff = spawn(FFMPEG_BIN, [
                 '-y',
                 '-i', inPath,
                 '-vf', 'scale=-2:480',
@@ -335,7 +343,7 @@ export default defineConfig(({ mode }) => {
 
               let stderr = ''
               await new Promise((resolve, reject) => {
-                const ff = spawn('ffmpeg', [
+                const ff = spawn(FFMPEG_BIN, [
                   '-y',
                   '-i', videoPath,
                   '-i', audioPath,
@@ -403,7 +411,7 @@ export default defineConfig(({ mode }) => {
 
         function probeDuration(file) {
           return new Promise((resolve) => {
-            const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])
+            const ff = spawn(FFPROBE_BIN, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])
             let out = ''
             ff.stdout.on('data', (c) => { out += c.toString() })
             ff.on('close', () => resolve(parseFloat(out.trim()) || 0))
@@ -441,7 +449,7 @@ export default defineConfig(({ mode }) => {
               await streamToFile(req, videoPath)
               // Extract mono 16kHz WAV — smallest size Gemini accepts well
               await new Promise((resolve, reject) => {
-                const ff = spawn('ffmpeg', ['-y', '-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', audioPath])
+                const ff = spawn(FFMPEG_BIN, ['-y', '-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', audioPath])
                 let er = ''
                 ff.stderr.on('data', (c) => { er += c.toString() })
                 ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg extract exit ${code}: ${er.slice(-300)}`)))
@@ -597,7 +605,7 @@ Giữ nguyên ngôn ngữ gốc, KHÔNG dịch. CHỈ trả JSON array, không g
 
               let stderr = ''
               await new Promise((resolve, reject) => {
-                const ff = spawn('ffmpeg', args)
+                const ff = spawn(FFMPEG_BIN, args)
                 ff.stderr.on('data', (c) => { stderr += c.toString() })
                 ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-600)}`)))
                 ff.on('error', (e) => reject(new Error(`spawn: ${e.message}`)))
