@@ -401,9 +401,18 @@ export default function VideoPipelineHelp() {
             <div className="px-4 pb-4 pt-2 text-xs text-foreground/85 leading-relaxed space-y-1">
               <ul className="list-disc pl-5 space-y-1">
                 <li>6 voice: alloy, echo, fable, onyx, nova, shimmer</li>
-                <li>Chi phí: ~$15/1 triệu ký tự</li>
+                <li>Chi phí: ~$15/1 triệu ký tự (trả phí, không có free tier)</li>
                 <li>Ổn định, latency thấp</li>
               </ul>
+              <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2.5">
+                <p className="font-bold text-green-300 mb-1">🔑 Cách lấy OpenAI API Key</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li>Vào <b>platform.openai.com</b> → đăng nhập</li>
+                  <li>Bấm avatar → <b>API keys</b> (hoặc vào platform.openai.com/api-keys)</li>
+                  <li><b>Create new secret key</b> → copy (dạng <code>sk-...</code>) → dán vào ô API Key</li>
+                  <li>Cần nạp credit ở mục <b>Billing</b> (tối thiểu $5) thì key mới chạy</li>
+                </ol>
+              </div>
             </div>
           </details>
 
