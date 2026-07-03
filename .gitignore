@@ -41,3 +41,6 @@ npm-debug.log*
 *.pke
 *.html
 !index.html
+
+# Usage metering runtime data (per-email quota DB + overrides) — not source
+data/
