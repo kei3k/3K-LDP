@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import ConfigForm from './components/ConfigForm';
 import PreviewPanel from './components/PreviewPanel';
@@ -29,6 +29,17 @@ export default function App() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState('');
   const [activeTab, setActiveTab] = useState('template'); // 'template' or 'translate'
+  const [currentUser, setCurrentUser] = useState(null); // {email, role} — fetched from /auth/me
+
+  // Fetch logged-in user's role so the admin tab can be shown/hidden.
+  // Server (requireAdmin on /admin + /admin/*) is the real gate; this is
+  // only for UI discoverability — never trust this for access control.
+  useEffect(() => {
+    fetch('/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setCurrentUser(data))
+      .catch(() => setCurrentUser(null));
+  }, []);
 
   // Config state
   const [config, setConfig] = useState({
@@ -947,6 +958,15 @@ Trả về JSON: {"items": [{"idx": 0, "text": "bản ${lang}", "vi": "bản Ti�
             >
               🔊 TTS
             </button>
+            {currentUser?.role === 'admin' && (
+              <a
+                href="/admin"
+                className="flex-1 py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                title="Quản lý nhân viên, khoá/mở tài khoản, đặt lại mật khẩu, xem quota sử dụng"
+              >
+                🛡️ Quản trị
+              </a>
+            )}
           </div>
 
           {/* AI Video Pipeline tab */}

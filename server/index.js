@@ -51,6 +51,13 @@ app.post('/auth/logout', auth.logout)
 // Everything below this line requires a valid local session.
 app.use(auth.requireSession)
 
+// GET /auth/me — lets the SPA know who is logged in + their role, so it
+// can show/hide role-gated UI (e.g. the admin tab). Role is re-read from
+// the DB on every request via requireSession, never trusted from client.
+app.get('/auth/me', (req, res) => {
+  res.json({ email: req.zumiaUser.email, role: req.zumiaUser.role })
+})
+
 // ── Admin panel (role=admin only) ─────────────────────────────────────────
 // requireAdmin MUST be mounted before any /admin route handler, otherwise
 // Express matches app.get('/admin', ...) first and never reaches the gate.
