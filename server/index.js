@@ -1,6 +1,6 @@
 // Production server for the "3K-LDP AI Video Tool" workspace (customer: Nam).
-// Serves the built SPA (dist/) + the 7 API middlewares (ported from
-// vite.config.js's dev-only configureServer) behind a Zumia-SSO gate.
+// Serves the built SPA (dist/) + the API middlewares behind a self-managed
+// local auth gate (Nam admins his own company's employees — no Supabase SSO).
 import 'dotenv/config'
 import express from 'express'
 import path from 'path'
@@ -8,9 +8,11 @@ import { fileURLToPath } from 'url'
 import { createVertexHandlers } from './handlers/vertex.js'
 import { compressVideo, swapAudio, createCloneTxHandler } from './handlers/ffmpeg.js'
 import { createFetchUrlHandler } from './handlers/fetchUrl.js'
-import { createAuthGate, LOGIN_PAGE_HTML, CALLBACK_PAGE_HTML } from './middleware/auth.js'
+import { createAuthGate, LOGIN_PAGE_HTML } from './middleware/auth.js'
 import { quotaGate } from './usage/usage.js'
 import { usageSummaryJson, usagePageHtml } from './usage/usageRoute.js'
+import { seedAdminIfEmpty } from './store/users.js'
+import { adminPageHtml, createEmployeeHandler, setActiveHandler, resetPasswordHandler } from './admin/adminRoute.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -19,30 +21,46 @@ const DIST_DIR = path.join(ROOT, 'dist')
 const env = process.env
 const PORT = env.PORT || 5175
 
+// ── Bootstrap the local user store (first boot only) ──────────────────────
+const seedResult = seedAdminIfEmpty(env)
+if (seedResult.seeded) {
+  console.log('[Users] Seeded first admin account:', seedResult.adminEmail)
+  console.log('[Users] Bootstrap password (shown once, save it now):', seedResult.adminPassword)
+} else {
+  console.log('[Users] User store already initialized, skipping seed.')
+}
+
 const app = express()
 app.disable('x-powered-by')
+app.set('trust proxy', true)
 
-// ── Auth gate (Zumia SSO via Supabase) ────────────────────────────────────
+// ── Auth gate (self-managed: local email+password, no Supabase/Google) ────
 const auth = createAuthGate(env)
 
 app.get('/login', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.end(LOGIN_PAGE_HTML)
 })
-// IMPORTANT: json parsing is scoped to /auth/* only. The vertex/ffmpeg
-// handlers below read the raw request stream themselves (multipart video
-// uploads, raw mp4 bodies) — a global body-parser would consume the
-// stream before they get to it and break every upload endpoint.
+// IMPORTANT: json parsing is scoped to /auth/* and /admin/* only. The
+// vertex/ffmpeg handlers below read the raw request stream themselves
+// (multipart video uploads, raw mp4 bodies) — a global body-parser would
+// consume the stream before they get to it and break every upload endpoint.
 app.post('/auth/login', express.json({ limit: '10kb' }), auth.login)
 app.post('/auth/logout', auth.logout)
-app.get('/auth/google', auth.googleStart)
-app.get('/auth/callback', auth.callbackPage)
-app.post('/auth/callback/verify', express.json({ limit: '10kb' }), auth.callbackVerify)
 
-// Everything below this line requires a valid, allow-listed session.
+// Everything below this line requires a valid local session.
 app.use(auth.requireSession)
 
-// ── Usage admin view (allowlist gate above + fixed-admin gate inside) ─────
+// ── Admin panel (role=admin only) ─────────────────────────────────────────
+// requireAdmin MUST be mounted before any /admin route handler, otherwise
+// Express matches app.get('/admin', ...) first and never reaches the gate.
+app.use('/admin', auth.requireAdmin)
+app.get('/admin', adminPageHtml(env))
+app.post('/admin/users', express.json({ limit: '10kb' }), createEmployeeHandler)
+app.post('/admin/users/:id/active', express.json({ limit: '10kb' }), setActiveHandler)
+app.post('/admin/users/:id/password', express.json({ limit: '10kb' }), resetPasswordHandler)
+
+// ── Usage admin view (session gate above + role=admin gate inside) ────────
 app.get('/api/usage/summary', usageSummaryJson(env))
 app.get('/usage', usagePageHtml(env))
 

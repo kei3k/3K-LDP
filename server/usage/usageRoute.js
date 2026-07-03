@@ -1,13 +1,11 @@
 // Admin view for per-email usage: GET /api/usage/summary (JSON) and
-// GET /usage (minimal HTML table). Restricted to a fixed admin email —
-// separate from the general NAM_ALLOWED_EMAILS allowlist so regular
-// workspace users can't see everyone else's usage.
+// GET /usage (minimal HTML table). Restricted to role=admin (checked via
+// requireAdmin middleware in server/index.js, re-verified here too since
+// this module can be mounted directly).
 import { getSummary, getCapForEmail } from './usage.js'
 
-const ADMIN_EMAIL = 'kei.marketer@gmail.com'
-
 function requireAdmin(req, res) {
-  if (req.zumiaUser?.email !== ADMIN_EMAIL) {
+  if (req.zumiaUser?.role !== 'admin') {
     res.status(403).json({ error: 'Chỉ admin mới xem được trang này' })
     return false
   }
