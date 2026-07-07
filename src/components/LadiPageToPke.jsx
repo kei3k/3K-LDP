@@ -275,31 +275,48 @@ export default function LadiPageToPke() {
       const proxyUrl = `/api/fetch-url?url=${encodeURIComponent(url)}`;
       // Retry up to 3 times: some hosts (Webcake CDN, Shopee) intermittently
       // time out or block. Backoff 1.5s → 3s → final attempt.
+      // Exception: a BLOCKED_TARGET response is a deliberate security
+      // decision (private/reserved IP), not a flake — retrying it can only
+      // ever produce the same block, so we stop immediately instead of
+      // burning 4.5s of backoff on a foregone conclusion.
       const maxAttempts = 3;
       let res = null;
       let lastErr = null;
+      let lastBody = null;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         setProgress(
           attempt === 1
             ? '🌐 Đang tải HTML từ URL...'
-            : `🔄 Server lag, đang thử lại lần ${attempt}/${maxAttempts}...`,
+            : `🔄 Đang thử lại lần ${attempt}/${maxAttempts}...`,
         );
         try {
           res = await fetch(proxyUrl);
           if (res.ok) break;
-          lastErr = new Error(`HTTP ${res.status}`);
+          lastBody = await res.json().catch(() => null);
+          lastErr = new Error(lastBody?.error || `HTTP ${res.status}`);
+          if (lastBody?.code === 'BLOCKED_TARGET') break;
         } catch (netErr) {
           lastErr = netErr;
+          lastBody = null;
           res = null;
         }
-        if (attempt < maxAttempts) {
+        if (attempt < maxAttempts && lastBody?.code !== 'BLOCKED_TARGET') {
           await new Promise((r) => setTimeout(r, 1500 * attempt));
         }
       }
       if (!res || !res.ok) {
-        throw new Error(
-          `Không thể tải trang sau ${maxAttempts} lần thử. ${lastErr?.message || ''} — Server đích đang lag, anh thử lại sau 30 giây.`,
-        );
+        const code = lastBody?.code;
+        let msg;
+        if (code === 'BLOCKED_TARGET') {
+          msg = 'Địa chỉ này không được phép tải (chặn bảo mật).';
+        } else if (code === 'TARGET_HTTP_ERROR') {
+          msg = `Trang đích trả lỗi HTTP ${lastBody?.targetStatus ?? ''}, thử lại sau.`.replace('  ', ' ');
+        } else if (code === 'TARGET_UNREACHABLE' || !res) {
+          msg = 'Không kết nối được trang đích (mạng hoặc site sập).';
+        } else {
+          msg = `Không thể tải trang sau ${maxAttempts} lần thử. ${lastErr?.message || ''}`;
+        }
+        throw new Error(msg);
       }
 
       let html = await res.text();

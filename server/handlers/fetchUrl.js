@@ -1,37 +1,33 @@
 // Local proxy to fetch external URLs — bypasses CORS.
 // SECURITY: this endpoint is a classic SSRF vector (arbitrary server-side
-// fetch controlled by the client). Hardened with two independent gates:
-//   1. Hostname allowlist — only domains this tool actually needs to reach
-//      (LadiPage/Webcake sources + the image CDNs referenced in the fetch
-//      headers below: alicdn/1688/shopee).
-//   2. DNS-resolve-then-check — resolve the hostname and reject if any
-//      resolved IP is private/loopback/link-local, so an allowed hostname
-//      can't be re-pointed (DNS rebinding) at internal infra.
+// fetch controlled by the client). Policy (founder-approved 2026-07-07):
+// any PUBLIC hostname may be fetched — no allowlist gate. Safety instead
+// comes from two independent, unconditional checks that always run:
+//   1. Protocol + raw-IP rejection — only http/https, and the hostname
+//      itself may not be a literal IP (forces a DNS name to resolve).
+//   2. DNS-resolve-then-check — resolve the hostname and reject if ANY
+//      resolved IP is private/loopback/link-local/CGNAT, so a public-looking
+//      hostname can't be re-pointed (DNS rebinding) at internal infra.
+// ALLOWED_FETCH_HOSTS (env) is kept as an optional fast-path allowlist:
+// if set and the hostname matches, DNS-safety check is skipped (trusted,
+// pre-vetted partner hosts only — e.g. hosts that returned non-public IPs
+// legitimately, like a CDN behind a CGNAT-range anycast). Empty by default,
+// meaning by default every request goes through the full safety check.
 import https from 'https'
 import http from 'http'
 import zlib from 'zlib'
 import dns from 'dns/promises'
 import net from 'net'
 
-// Domains the tool legitimately needs (landing page sources + image CDNs
-// referenced by the Referer/anti-bot headers below). Subdomains allowed.
-const DEFAULT_ALLOWED_HOSTS = [
-  'ladipage.vn', 'ladipage.com',
-  'webcake.io', 'webcake.vn',
-  'alicdn.com', '1688.com', 'detail.1688.com',
-  'shopee.vn', 'susercontent.com', 'shopeemobile.com',
-  'cdn.tgdd.vn', 'lazada.vn', 'lzd-img-global.slatic.net',
-]
-
-function getAllowedHosts(env) {
+function getFastPathHosts(env) {
   const extra = (env.ALLOWED_FETCH_HOSTS || '')
     .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)
-  return new Set([...DEFAULT_ALLOWED_HOSTS, ...extra])
+  return new Set(extra)
 }
 
-function hostAllowed(hostname, allowedHosts) {
+function hostMatchesFastPath(hostname, fastPathHosts) {
   const h = hostname.toLowerCase()
-  for (const allowed of allowedHosts) {
+  for (const allowed of fastPathHosts) {
     if (h === allowed || h.endsWith('.' + allowed)) return true
   }
   return false
@@ -59,32 +55,45 @@ function isPrivateOrReservedIp(ip) {
   return true // unknown → block
 }
 
-async function assertSafeTarget(parsedUrl, allowedHosts) {
+// Errors thrown here carry a `code` so the HTTP layer can tell "we refused
+// to even try" (SSRF guard) apart from "we tried and the network/target
+// failed" — the two must never be reported to the client with the same
+// wording, or the security guard's behavior becomes indistinguishable from
+// a flaky network, which is both unhelpful and a mild info-leak either way.
+class BlockedTargetError extends Error {
+  constructor(message) {
+    super(message)
+    this.code = 'BLOCKED_TARGET'
+  }
+}
+
+async function assertSafeTarget(parsedUrl, fastPathHosts) {
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    throw new Error(`Protocol not allowed: ${parsedUrl.protocol}`)
+    throw new BlockedTargetError(`Protocol not allowed: ${parsedUrl.protocol}`)
   }
-  if (!hostAllowed(parsedUrl.hostname, allowedHosts)) {
-    throw new Error(`Host not in allowlist: ${parsedUrl.hostname}`)
-  }
-  // Reject raw-IP targets outright (allowlist is hostname-based).
+  // Reject raw-IP targets outright — a hostname must resolve via DNS so the
+  // check below can actually inspect what it resolves to.
   if (net.isIP(parsedUrl.hostname)) {
-    throw new Error('Raw IP targets are not allowed')
+    throw new BlockedTargetError('Raw IP targets are not allowed')
+  }
+  if (hostMatchesFastPath(parsedUrl.hostname, fastPathHosts)) {
+    return // pre-vetted partner host — skip DNS-safety check
   }
   const addresses = await dns.lookup(parsedUrl.hostname, { all: true })
   for (const { address } of addresses) {
     if (isPrivateOrReservedIp(address)) {
-      throw new Error(`Resolved IP blocked (private/reserved): ${address}`)
+      throw new BlockedTargetError(`Resolved IP blocked (private/reserved): ${address}`)
     }
   }
 }
 
-function fetchWithRedirects(url, allowedHosts, maxRedirects = 5) {
+function fetchWithRedirects(url, fastPathHosts, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error('Too many redirects'))
 
     const parsedUrl = new URL(url)
 
-    assertSafeTarget(parsedUrl, allowedHosts).then(() => {
+    assertSafeTarget(parsedUrl, fastPathHosts).then(() => {
       const client = parsedUrl.protocol === 'https:' ? https : http
 
       const options = {
@@ -122,12 +131,15 @@ function fetchWithRedirects(url, allowedHosts, maxRedirects = 5) {
         if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
           const redirectUrl = new URL(response.headers.location, url).href
           console.log('[Proxy] Redirect:', response.statusCode, '->', redirectUrl)
-          fetchWithRedirects(redirectUrl, allowedHosts, maxRedirects - 1).then(resolve).catch(reject)
+          fetchWithRedirects(redirectUrl, fastPathHosts, maxRedirects - 1).then(resolve).catch(reject)
           return
         }
 
         if (response.statusCode !== 200) {
-          return reject(new Error(`HTTP ${response.statusCode} from ${url}`))
+          const err = new Error(`HTTP ${response.statusCode} from ${url}`)
+          err.code = 'TARGET_HTTP_ERROR'
+          err.targetStatus = response.statusCode
+          return reject(err)
         }
 
         const chunks = []
@@ -143,14 +155,16 @@ function fetchWithRedirects(url, allowedHosts, maxRedirects = 5) {
           console.log('[Proxy] Success:', url, '- Size:', buffer.length, '- Enc:', encoding || 'none', '- Type:', contentType)
           resolve({ buffer, contentType })
         })
-        stream.on('error', reject)
-        response.on('error', reject)
+        stream.on('error', (e) => { e.code = e.code || 'TARGET_UNREACHABLE'; reject(e) })
+        response.on('error', (e) => { e.code = e.code || 'TARGET_UNREACHABLE'; reject(e) })
       })
 
-      req.on('error', reject)
+      req.on('error', (e) => { e.code = 'TARGET_UNREACHABLE'; reject(e) })
       req.on('timeout', () => {
         req.destroy()
-        reject(new Error('Request timeout (60s)'))
+        const err = new Error('Request timeout (60s)')
+        err.code = 'TARGET_UNREACHABLE'
+        reject(err)
       })
       req.end()
     }).catch(reject)
@@ -158,17 +172,17 @@ function fetchWithRedirects(url, allowedHosts, maxRedirects = 5) {
 }
 
 export function createFetchUrlHandler(env) {
-  const allowedHosts = getAllowedHosts(env)
+  const fastPathHosts = getFastPathHosts(env)
   return async function fetchUrlHandler(req, res) {
     const url = new URL(req.url, 'http://localhost').searchParams.get('url')
     if (!url) {
       res.statusCode = 400
-      res.end(JSON.stringify({ error: 'Missing url param' }))
+      res.end(JSON.stringify({ error: 'Missing url param', code: 'BAD_REQUEST' }))
       return
     }
 
     try {
-      const result = await fetchWithRedirects(url, allowedHosts)
+      const result = await fetchWithRedirects(url, fastPathHosts)
 
       if (result.contentType && result.contentType.startsWith('image/')) {
         res.setHeader('Content-Type', result.contentType)
@@ -181,10 +195,21 @@ export function createFetchUrlHandler(env) {
         res.end(html)
       }
     } catch (e) {
-      console.error('[Proxy] Error:', e.message)
-      res.statusCode = 502
+      console.error('[Proxy] Error:', e.code || 'UNKNOWN', e.message)
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ error: e.message }))
+      if (e.code === 'BLOCKED_TARGET') {
+        res.statusCode = 403
+        res.end(JSON.stringify({ error: e.message, code: 'BLOCKED_TARGET' }))
+      } else if (e.code === 'TARGET_HTTP_ERROR') {
+        res.statusCode = 502
+        res.end(JSON.stringify({ error: e.message, code: 'TARGET_HTTP_ERROR', targetStatus: e.targetStatus }))
+      } else {
+        // Network failure, timeout, DNS failure, or anything unclassified —
+        // all mean "we tried, the target/network didn't cooperate", never
+        // the same thing as a deliberate security block.
+        res.statusCode = 504
+        res.end(JSON.stringify({ error: e.message, code: 'TARGET_UNREACHABLE' }))
+      }
     }
   }
 }
