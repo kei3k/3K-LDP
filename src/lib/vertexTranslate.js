@@ -17,6 +17,30 @@ function parseJsonArray(text) {
   throw new Error('Cannot parse JSON array from Gemini response');
 }
 
+// Vietnamese-specific diacritics (letters that don't exist in plain Latin/EN text).
+// Used to detect "source is already Vietnamese" so we can skip a same-language
+// Gemini round-trip that otherwise tends to paraphrase strings longer and
+// overflow the fixed absolute-position boxes copied from the source CSS.
+const VI_DIACRITIC_RE = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/i;
+
+function isVietnamese(str) {
+  return VI_DIACRITIC_RE.test(str);
+}
+
+// Sample a list of {clean} text pieces and estimate whether the source content
+// is already in Vietnamese. Only strings with length >= 4 are considered (short
+// strings like "OK", "Mua" are unreliable signals). Returns true when >=60% of
+// the sampled (long-enough) strings contain a VN diacritic.
+function detectSourceIsVietnamese(textList, sampleSize = 40) {
+  const candidates = textList
+    .map((t) => t.clean)
+    .filter((s) => s.length >= 4);
+  if (!candidates.length) return false;
+  const sample = candidates.slice(0, sampleSize);
+  const viCount = sample.filter(isVietnamese).length;
+  return viCount / sample.length >= 0.6;
+}
+
 async function callVertexFlash(prompt) {
   const resp = await fetch(`/api/vertex/models/${MODEL}:generateContent`, {
     method: 'POST',
@@ -58,10 +82,6 @@ async function callVertexFlash(prompt) {
  * @param {(msg: string) => void} [onProgress]
  */
 export async function translateLandingHtml(html, targetLanguage, onProgress) {
-  // NOTE: Do NOT skip when target === 'Tiếng Việt'. Source may be Thai/EN/CN
-  // (e.g. dealmobi.click Thai landing) and customer chose VN as target.
-  // Let Gemini handle identity case (source==target) naturally — it returns
-  // the text unchanged when no translation is needed.
   if (!targetLanguage) return html;
   onProgress?.(`🌐 Đang dịch sang ${targetLanguage} (Vertex ${MODEL})...`);
 
@@ -109,6 +129,19 @@ export async function translateLandingHtml(html, targetLanguage, onProgress) {
     onProgress?.('Không có text để dịch.');
     return html;
   }
+
+  // SAME-LANGUAGE SKIP: if target is Vietnamese and the sampled source text is
+  // already predominantly Vietnamese, skip the Gemini round-trip entirely.
+  // Root cause of the LadiPage→PKE overlap bug: Gemini "translating" VN→VN
+  // tends to paraphrase strings longer (e.g. "CAM KẾT" → "CAM KẾT CHẤT LƯỢNG"),
+  // which overflow the fixed absolute-position boxes copied byte-for-byte from
+  // the source CSS. Skipping preserves layout when no real translation is needed.
+  if (targetLanguage === 'Tiếng Việt' && detectSourceIsVietnamese(textList)) {
+    console.log('[Translate] source already vi — skipped, layout preserved');
+    onProgress?.('ℹ️ Nội dung đã là Tiếng Việt — bỏ qua dịch, giữ nguyên layout.');
+    return html;
+  }
+
   console.log(`[Vertex-Translate] ${textList.length} pieces → ${targetLanguage}`);
 
   // Chunk list to avoid token blow-up on a single call (flash-preview output budget)
@@ -124,7 +157,11 @@ export async function translateLandingHtml(html, targetLanguage, onProgress) {
     const chunk = chunks[ci];
     onProgress?.(`🌐 Dịch chunk ${ci + 1}/${chunks.length} (${chunk.length} text)...`);
 
-    const prompt = `Dịch ${chunk.length} text sau sang ${targetLanguage}. Văn phong marketing tự nhiên. Giữ emoji + số + tiền tệ. KHÔNG dịch URL/mã SP. Text đã đúng ngôn ngữ thì giữ nguyên.
+    const prompt = `Dịch ${chunk.length} text sau sang ${targetLanguage}. Văn phong marketing tự nhiên. Giữ emoji + số + tiền tệ. KHÔNG dịch URL/mã SP.
+
+QUY TẮC BẮT BUỘC:
+1. Nếu text ĐÃ ĐÚNG ngôn ngữ đích (${targetLanguage}) rồi thì trả về Y NGUYÊN, KHÔNG diễn giải/viết lại/thêm từ.
+2. Bản dịch PHẢI có độ dài KHÔNG VƯỢT QUÁ 115% số ký tự của text gốc (vì text nằm trong box kích thước cố định trên landing page — dài hơn sẽ tràn/vỡ layout). Ưu tiên bản dịch NGẮN HƠN hoặc bằng độ dài gốc, tuyệt đối tránh viết dài hơn.
 
 ${chunk.map((t, i) => `${i}: "${t.clean.replace(/"/g, '\\"')}"`).join('\n')}
 
