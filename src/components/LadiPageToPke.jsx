@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Download, Globe, Link as LinkIcon, Loader2, FileDown, Scissors, Image, X, CheckSquare, Square } from 'lucide-react';
 import { generatePkeBuffer } from '../lib/htmlToPke';
 import { translateLandingHtml } from '../lib/vertexTranslate';
+import { reflowTranslatedPage } from '../lib/reflowLayout';
 import { stripContactInfo } from '../lib/stripContacts';
 import { extractImageUrls } from '../lib/imagesInHtml';
 import { translateImageWithNanoBanana } from '../lib/translateImage';
@@ -394,7 +395,23 @@ export default function LadiPageToPke() {
       // (dealmobi.click), Chinese, English… and customer wants VN output.
       // translateLandingHtml itself handles identity (source==target) cheaply.
       if (language) {
+        const htmlBeforeTranslate = html;
         html = await translateLandingHtml(html, language, setProgress);
+
+        // Measure-and-shift reflow: a REAL translation (e.g. Chinese→Vietnamese)
+        // can make text wrap onto more lines than the fixed-height box copied
+        // from LadiPage's CSS, overlapping whatever sits below it. Grow the box
+        // + shift siblings down to compensate. No-op (and zero risk) when
+        // translateLandingHtml took the same-language skip path, since then
+        // htmlBeforeTranslate === html and reflowTranslatedPage short-circuits.
+        if (html !== htmlBeforeTranslate) {
+          setProgress('📐 Đang kiểm tra & giãn layout theo bản dịch...');
+          try {
+            html = reflowTranslatedPage(htmlBeforeTranslate, html);
+          } catch (err) {
+            console.warn('[LadiPageToPke] reflow failed, continuing with unshifted layout:', err?.message);
+          }
+        }
       }
 
       setProgress('📦 Đang đóng gói PKE...');
