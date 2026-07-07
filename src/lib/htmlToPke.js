@@ -215,6 +215,21 @@ function extractScripts(html) {
 }
 
 /**
+ * Strip non-visual blocks (script/noscript/template/style + JSON-typed elements)
+ * before raw HTML is dumped into a fallback text-block. Without this, Pancake
+ * pages (no com-section markup) fall through to the "wrap whole HTML as text"
+ * path and their embedded page-config JSON (<script type="application/json">,
+ * analytics, etc.) renders as literal visible text in the cloned page.
+ */
+function stripNonVisual(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<template[\s\S]*?<\/template>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+}
+
+/**
  * Remove lazy-load markers from every class="..." attribute.
  * LadiPage uses two variants:
  *   - `class="lazy"` (older builds): CSS hides until JS strips it
@@ -285,7 +300,8 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
 
   if (comSections.length === 0) {
     // Fallback: non-LadiPage HTML — produce 1 section with full HTML
-    pageSections = [buildSection({ html: escapedHtml, name: 'section_1', sectionIndex: 1, height: 10000, canvasDesktop })];
+    // Fix Pancake JSON leak: nhánh fallback nhồi HTML thô, phải lọc script/json kẻo hiện ra text
+    pageSections = [buildSection({ html: stripNonVisual(escapedHtml), name: 'section_1', sectionIndex: 1, height: 10000, canvasDesktop })];
   } else {
     // LadiPage: one PKE section per com-section div.
     // Hybrid CSS strategy: extra_css carries the page-wide stylesheet (for
