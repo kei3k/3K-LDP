@@ -308,6 +308,25 @@ function stripLazyClasses(html) {
  * use !important, simply not touching the class isn't enough — the CSS
  * itself must stop hiding the element. We bake the "already animated in"
  * (final visible) state instead, matching the stripLazyClasses strategy.
+ *
+ * FOLLOW-UP FIX (flash-then-vanish): the above only defuses the STATIC
+ * pre-animation hide rule. It does NOT touch the animation itself — LadiPage
+ * also ships per-widget compound-selector rules pairing the (still-present,
+ * see stripAnimationClasses) `.ladi-animation` trigger class with a
+ * `@keyframes` name, e.g.:
+ *   #GROUP8.ladi-animation > .ladi-group, #BUTTON7.ladi-animation > .ladi-button
+ *     { animation-name: flash; animation-delay: 1s; animation-duration: 1s;
+ *       animation-iteration-count: infinite; }
+ * This is plain CSS — no JS trigger needed. Once `.ladi-animation` is on the
+ * element, the browser runs it unconditionally: for the first `animation-
+ * delay` (here 1s) the element sits at its normal (now-visible, thanks to
+ * the fix above) state, then the keyframe kicks in — "flash" (and similar
+ * bounce/pulse attention loops) cycles back through opacity:0 — so the
+ * element shows fully for ~1s, then vanishes, forever, on a loop. That is
+ * EXACTLY the reported bug. Fix: for any rule whose selector references the
+ * bare `.ladi-animation` trigger class, strip its animation declarations and
+ * delete the @keyframes blocks it drove (so nothing is left to replay the
+ * hide/reveal cycle even if the class ever ends up on an element again).
  */
 function stripEntranceAnimationHiding(css) {
   let out = css.replace(/\.ladi-animation-hidden\s*\{[^}]*\}/gi, '.ladi-animation-hidden{}');
@@ -324,7 +343,57 @@ function stripEntranceAnimationHiding(css) {
       .replace(/pointer-events\s*:\s*none\s*!important;?/gi, '');
     return '{' + cleaned + '}';
   });
+
+  // Defuse the animation wiring itself: any rule selecting the bare
+  // `.ladi-animation` class (word-boundary aware so it does NOT match the
+  // already-neutralized `.ladi-animation-hidden` variant) loses its
+  // animation-* declarations, and any @keyframes name it referenced gets
+  // deleted outright.
+  const keyframeNames = new Set();
+  out = out.replace(/([^{}]+)\{([^}]*)\}/g, (block, selector, body) => {
+    if (!/\.ladi-animation(?![\w-])/.test(selector)) return block;
+    for (const nm of body.matchAll(/animation(?:-name)?\s*:\s*([^;]+);?/gi)) {
+      const firstToken = nm[1].trim().split(/\s+/)[0];
+      if (firstToken && firstToken.toLowerCase() !== 'none') keyframeNames.add(firstToken);
+    }
+    const cleanedBody = body.replace(/(?:-webkit-)?animation(?:-[a-z-]+)?\s*:[^;]+;?/gi, '');
+    return selector + '{' + cleanedBody + '}';
+  });
+  for (const name of keyframeNames) {
+    const escName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const kfRe = new RegExp('@(?:-webkit-)?keyframes\\s+' + escName + '\\s*\\{(?:[^{}]*\\{[^{}]*\\})*[^{}]*\\}', 'gi');
+    out = out.replace(kfRe, '');
+  }
+
+  // Final safety net: force any surviving entrance-animation marker to its
+  // permanent final-visible state, in case a class slips through (defensive
+  // — the actual removal happens in stripAnimationClasses on the HTML side).
+  out +=
+    '\n[class*="ladi-animation"]{opacity:1 !important;visibility:visible !important;' +
+    'transform:none !important;animation:none !important;-webkit-animation:none !important;' +
+    'transition:none !important;}';
+
   return out;
+}
+
+/**
+ * Remove the leftover LadiPage entrance-animation MARKERS from every
+ * class="..." attribute: `ladi-animation-hidden` (pre-reveal state) and the
+ * bare `ladi-animation` trigger class (pairs with the per-widget
+ * animation-name rules defused in stripEntranceAnimationHiding above). Also
+ * strips `data-animation*` attributes some builds use as an alternate
+ * trigger marker. Order matters: strip the longer `-hidden` token first, or
+ * the bare-token regex would partially consume it and leave a dangling
+ * `-hidden` fragment (same reasoning as stripLazyClasses below).
+ */
+function stripAnimationClasses(html) {
+  return html
+    .replace(/(\bclass="[^"]*?)\bladi-animation-hidden\b\s?([^"]*")/gi, (_, b, a) => b + a)
+    .replace(/(\bclass='[^']*?)\bladi-animation-hidden\b\s?([^']*')/gi, (_, b, a) => b + a)
+    .replace(/(\bclass="[^"]*?)\bladi-animation\b\s?([^"]*")/gi, (_, b, a) => b + a)
+    .replace(/(\bclass='[^']*?)\bladi-animation\b\s?([^']*')/gi, (_, b, a) => b + a)
+    .replace(/\sdata-animation[a-zA-Z0-9_-]*="[^"]*"/gi, '')
+    .replace(/\sdata-animation[a-zA-Z0-9_-]*='[^']*'/gi, '');
 }
 
 /**
@@ -407,7 +476,7 @@ function resolveReviewSummaries(doc) {
 }
 
 export function generatePkeBuffer(html, productName = 'Landing Page') {
-  const escapedHtml = stripLazyClasses(html.trim());
+  const escapedHtml = stripAnimationClasses(stripLazyClasses(html.trim()));
 
   // Extract <head> block for height parsing and CSS/JS extraction
   const headMatch = escapedHtml.match(/<head\b[^>]*>[\s\S]*?<\/head>/i);
