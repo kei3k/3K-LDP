@@ -426,8 +426,16 @@ function resolveVideoWidgets(doc) {
     video.setAttribute('src', meta.ci);
     video.setAttribute('controls', '');
     video.setAttribute('playsinline', '');
-    video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;');
+    video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;pointer-events:auto;');
     bg.appendChild(video);
+    // LadiPage renders a static play-button overlay (e.g. a `SHAPE...` div)
+    // stacked on top of this widget with no click handler in the static
+    // clone, occluding the native <video controls> underneath — the
+    // "video not clickable" bug. Make every other layer in the widget
+    // click-through so hit-testing falls to the video regardless of DOM/
+    // z-index order, then re-enable the video explicitly. pointer-events
+    // doesn't affect box size, so section height/layout is untouched.
+    widget.style.setProperty('pointer-events', 'none');
   }
 }
 
