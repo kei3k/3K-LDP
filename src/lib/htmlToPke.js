@@ -442,10 +442,26 @@ function resolveVideoWidgets(doc) {
  *
  * What IS available statically is the widget's own aggregate rating summary,
  * baked as `<script class="ladi-review-script" type="application/json">`
- * next to the iframe (star-count distribution). We inject a small visible
- * "★ 4.7/5 · 66 đánh giá" summary in place of the otherwise-blank iframe so
- * the widget isn't a dead empty area — the individual review cards remain
+ * next to the iframe: `{ ea: [{eb: starValue, ec: count}, ...] }` (star-count
+ * distribution — field names are LadiPage's own minified export, verified
+ * against nhanong.top/htxtaybac: ea=[{eb:5,ec:56},{eb:4,ec:4},{eb:3,ec:3},
+ * {eb:2,ec:2},{eb:1,ec:1}]). We reconstruct a real rating-summary widget
+ * (big average + star row + per-star distribution bars) from this data and
+ * place it where the iframe was — the individual review cards remain
  * genuinely unrecoverable and are NOT rendered.
+ *
+ * The reconstructed widget needs its own explicit pixel box to actually
+ * occupy space in Webcake's absolute-position layout: the plain text this
+ * used to inject had no width/height, and the wrapping `#<reviewId>` element
+ * (e.g. `#REVIEW1`) only carries `position:absolute;top:0;left:0` in some
+ * per-section CSS extracts (its own `width/height` rule can be missing from
+ * that section's copy) — with no intrinsic size, the summary would collapse
+ * to near-zero and sit hidden under sibling absolutely-positioned elements
+ * anchored at the same origin. We recover the widget's real declared pixel
+ * box from the page's own `#<reviewId>{width:...px;height:...px}` head CSS
+ * rule (same one that originally sized the iframe) and set it inline on our
+ * replacement div directly, so it renders at the correct size regardless of
+ * whether the wrapper's own rule survived into this section's CSS extract.
  */
 function resolveReviewSummaries(doc) {
   const scripts = Array.from(doc.querySelectorAll('script.ladi-review-script'));
@@ -461,16 +477,79 @@ function resolveReviewSummaries(doc) {
     const total = dist.reduce((sum, d) => sum + (d.ec || 0), 0);
     if (total <= 0) continue;
     const weighted = dist.reduce((sum, d) => sum + (d.eb || 0) * (d.ec || 0), 0);
-    const avg = (weighted / total).toFixed(1);
+    // LadiPage's own widget truncates (not rounds) the average to 1 decimal —
+    // verified against nhanong.top/htxtaybac: 310/66=4.6969... displays "4.6",
+    // not the "4.7" a naive toFixed(1) round would produce.
+    const avg = (Math.floor((weighted / total) * 10) / 10).toFixed(1);
+    const avgNum = parseFloat(avg);
 
-    const iframe = scriptEl.parentElement && scriptEl.parentElement.querySelector('.ladi-review-iframe');
+    const wrapper = scriptEl.parentElement;
+    const iframe = wrapper && wrapper.querySelector('.ladi-review-iframe');
     if (!iframe) continue;
+
+    // Best-effort real box size from the page's own CSS; falls back to a
+    // sane default so the widget still renders (just not pixel-perfect) if
+    // the wrapper has no id or the rule can't be found.
+    let boxW = 400;
+    let boxH = 260;
+    if (wrapper.id) {
+      const cssText = Array.from(doc.querySelectorAll('style'))
+        .map((s) => s.textContent || '')
+        .join('\n');
+      const escId = wrapper.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const ruleRe = new RegExp('#' + escId + '\\b[^{]*\\{([^}]*)\\}', 'g');
+      let rm;
+      while ((rm = ruleRe.exec(cssText)) !== null) {
+        const wMatch = rm[1].match(/width\s*:\s*(\d+(?:\.\d+)?)px/);
+        const hMatch = rm[1].match(/height\s*:\s*(\d+(?:\.\d+)?)px/);
+        if (wMatch) boxW = Math.round(parseFloat(wMatch[1]));
+        if (hMatch) boxH = Math.round(parseFloat(hMatch[1]));
+      }
+    }
+
+    // Map star-count distribution by rating value — don't assume array order.
+    const byStar = {};
+    for (const d of dist) byStar[d.eb] = d.ec || 0;
+
+    const gold = '#f5a623';
+    const filledStars = Math.floor(avgNum); // e.g. 4.6 -> 4 filled, 1 grey
+    const starIcons = [1, 2, 3, 4, 5]
+      .map((n) => '<span style="color:' + (n <= filledStars ? gold : '#ddd') + ';font-size:18px;">★</span>')
+      .join('');
+
+    const distRows = [5, 4, 3, 2, 1]
+      .map((star) => {
+        const count = byStar[star] || 0;
+        const pct = Math.round((count / total) * 100);
+        return (
+          '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;line-height:1;">' +
+          '<span style="width:22px;flex-shrink:0;">' + star + '★</span>' +
+          '<div style="flex:1;background:#eee;border-radius:4px;height:8px;overflow:hidden;">' +
+          '<div style="width:' + pct + '%;height:100%;background:' + gold + ';"></div>' +
+          '</div>' +
+          '<span style="width:26px;text-align:right;flex-shrink:0;">' + count + '</span>' +
+          '</div>'
+        );
+      })
+      .join('');
+
     const summary = doc.createElement('div');
     summary.setAttribute(
       'style',
-      'display:flex;align-items:center;gap:8px;padding:16px;font-family:sans-serif;font-size:16px;'
+      'position:relative;width:' + boxW + 'px;max-width:100%;height:' + boxH + 'px;' +
+        'box-sizing:border-box;padding:16px;font-family:Arial,Helvetica,sans-serif;' +
+        'background:#fff;display:flex;flex-direction:column;justify-content:center;gap:10px;overflow:hidden;'
     );
-    summary.textContent = '★ ' + avg + '/5 · ' + total + ' đánh giá';
+    summary.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;">' +
+      '<span style="font-size:36px;font-weight:700;color:#222;line-height:1;">' + avg + '</span>' +
+      '<div style="display:flex;flex-direction:column;gap:4px;">' +
+      '<div style="letter-spacing:2px;">' + starIcons + '</div>' +
+      '<div style="color:#666;font-size:13px;">' + total + ' đánh giá</div>' +
+      '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px;">' + distRows + '</div>';
+
     iframe.replaceWith(summary);
   }
 }
