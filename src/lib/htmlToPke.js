@@ -475,6 +475,36 @@ function resolveReviewSummaries(doc) {
   }
 }
 
+/**
+ * Remove leftover <script>/<noscript>/<template> tags sitting directly in
+ * the page BODY before each section's outerHTML is captured (regression
+ * fix — malformed duplicate elements on publish).
+ *
+ * LadiPage widgets embed their runtime config/CSS as inline <script> tags
+ * living right inside the widget's own markup, e.g. a review widget ships
+ * `<script class="ladi-review-style">...css...</script><script
+ * class="ladi-review-script" type="application/json">{...}</script>` as
+ * direct siblings. resolveVideoWidgets/resolveReviewSummaries above already
+ * read whatever they need out of these BEFORE this runs — none of them ever
+ * execute in the static clone. Left in place, though, they survive verbatim
+ * into that section's outerHTML → specials.text raw-HTML string. Webcake's
+ * own published-page bootstrap embeds that same string inside ITS OWN
+ * wrapping <script type="application/json"> tag; the browser's HTML
+ * tokenizer scans for the literal byte sequence `</script>` with zero
+ * awareness of JSON string-escaping, so a leftover inner `</script>` closes
+ * Webcake's OUTER script tag early. Everything after that point — including
+ * the JSON-escaped (backslash-quoted) remainder of Webcake's own page-data —
+ * spills out as literal body markup and the parser turns it into real,
+ * malformed DOM elements (`id="\"IMAGE11\""`-style garbage, full-width,
+ * breaking layout). The non-LadiPage fallback path already strips exactly
+ * this (see stripNonVisual above, added for the same "JSON leaks as visible
+ * text" reason) — this brings the main LadiPage per-section path in line.
+ */
+function stripBodyScripts(doc) {
+  if (!doc.body) return;
+  doc.body.querySelectorAll('script, noscript, template').forEach((el) => el.remove());
+}
+
 export function generatePkeBuffer(html, productName = 'Landing Page') {
   const escapedHtml = stripAnimationClasses(stripLazyClasses(html.trim()));
 
@@ -522,6 +552,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   // captures each section's outerHTML, so the resolved markup is included.
   resolveVideoWidgets(doc);
   resolveReviewSummaries(doc);
+  stripBodyScripts(doc);
 
   let comSections = extractComSections(escapedHtml, doc);
 
