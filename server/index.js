@@ -101,6 +101,10 @@ app.get('/api/fetch-url', createFetchUrlHandler(env))
 // ── Static SPA ─────────────────────────────────────────────────────────────
 app.use(express.static(DIST_DIR, { index: false }))
 app.get('*', (req, res) => {
+  // SPA shell must never be cached: it references hashed asset filenames
+  // (e.g. /assets/index-<hash>.js), so a stale cached index.html would
+  // keep pointing browsers at an old, already-deleted bundle after deploys.
+  res.set('Cache-Control', 'no-cache')
   res.sendFile(path.join(DIST_DIR, 'index.html'))
 })
 
