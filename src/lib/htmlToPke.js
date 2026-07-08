@@ -187,6 +187,51 @@ function isHiddenOrPopupSection(sectionId, sectionHtml, headCss) {
 }
 
 /**
+ * computeContentBoundHeight — cross-check/fallback for a section's declared
+ * CSS height. Some LadiPage exports carry a broken `height:undefinedpx` (or
+ * no numeric height at all) on the mobile-media-query override of a section's
+ * direct content widgets; when the SECTION's own #id{height:...} rule is
+ * itself missing/undefined the regex extraction above silently falls back to
+ * a hardcoded 1500px default — wrong either way (too short clips content,
+ * too tall leaves a gap) and breaks Webcake's fixed-height absolute
+ * section-stacking render.
+ *
+ * This computes the REAL content bound: the max bottom edge (top+height) of
+ * the section's direct content children, read from their own #id{top;height}
+ * CSS rules (same "first non-media rule wins" strategy as the section-height
+ * regex, so it agrees with desktop-canvas layout). Returns 0 when nothing is
+ * resolvable (e.g. background-only spacer sections with no widget children)
+ * so the caller can safely keep using the declared height in that case.
+ */
+function computeContentBoundHeight(outerHTML, head) {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(outerHTML, 'text/html');
+  } catch {
+    return 0;
+  }
+  const root = doc.body && doc.body.firstElementChild;
+  if (!root) return 0;
+  // LadiPage nests real content under .section-container; fall back to the
+  // section root's own direct children for other builders / regex-fallback HTML.
+  const container = root.querySelector(':scope > .section-wrapper > .section-container') || root;
+  const children = Array.from(container.children).filter((c) => c.id);
+
+  let maxBottom = 0;
+  for (const child of children) {
+    const escId = child.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('#' + escId + '\\s*\\{([^}]*)\\}', 'i');
+    const m = head.match(re);
+    if (!m) continue;
+    const topM = m[1].match(/\btop\s*:\s*(-?\d+(?:\.\d+)?)px/i);
+    const heightM = m[1].match(/\bheight\s*:\s*(-?\d+(?:\.\d+)?)px/i);
+    if (!topM || !heightM) continue; // covers "height:undefinedpx" / missing rule
+    maxBottom = Math.max(maxBottom, parseFloat(topM[1]) + parseFloat(heightM[1]));
+  }
+  return Math.round(maxBottom);
+}
+
+/**
  * Extract and concatenate all <style>...</style> blocks from an HTML string.
  * Returns raw CSS text (without <style> tags).
  */
@@ -330,7 +375,10 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
       //      [^{]* would otherwise happily eat the "8" before {)
       // Try strict (selector immediately followed by { ) first, then loose fallback.
       const escId = sectionElementId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      let sectionHeight = 1500;
+      // null = "not resolved yet", distinct from a genuinely-parsed value —
+      // needed below to tell "declared height missing" (untrustworthy 1500
+      // placeholder) apart from "declared height found but too small".
+      let sectionHeight = null;
       // Strict: #SECTIONxxx { ... height: NNN.NNNpx }
       const strictRe = new RegExp('#' + escId + '\\s*\\{[^}]*height\\s*:\\s*(\\d+(?:\\.\\d+)?)px', 'i');
       const sm = head.match(strictRe);
@@ -342,6 +390,26 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
         const looseRe = new RegExp('#' + escId + '(?![A-Za-z0-9_-])[^{]*\\{[^}]*height\\s*:\\s*(\\d+(?:\\.\\d+)?)px', 'i');
         const lm = head.match(looseRe);
         if (lm) sectionHeight = Math.round(parseFloat(lm[1]));
+      }
+
+      // Robustness fix (Webcake gap/overlap bug): the CSS regex above can fail
+      // to resolve a numeric height at all (e.g. LadiPage's known
+      // `height:undefinedpx` export bug), and previously fell back to a blind
+      // 1500px placeholder — almost always too TALL for the real content,
+      // leaving a visible gap when Webcake stacks sections as fixed-height
+      // absolute boxes. Cross-check against the section's actual content
+      // bound (max child bottom) instead:
+      //   - height not resolved at all  → trust the computed content bound
+      //     (falls back to 1500 only if that's ALSO unresolvable, e.g. an
+      //     empty background-only spacer section);
+      //   - height resolved but smaller than real content → bump up to the
+      //     content bound so nothing clips.
+      // Never shrink a validly-declared height — only grow it.
+      const contentBoundHeight = computeContentBoundHeight(sec.outerHTML, head);
+      if (sectionHeight === null || !Number.isFinite(sectionHeight) || sectionHeight <= 0) {
+        sectionHeight = contentBoundHeight > 0 ? contentBoundHeight : 1500;
+      } else if (contentBoundHeight > sectionHeight) {
+        sectionHeight = contentBoundHeight;
       }
 
       const wrappedHtml = inlineStyleTag + sec.outerHTML;
