@@ -290,6 +290,122 @@ function stripLazyClasses(html) {
     .replace(/(\bclass="[^"]*?)\blazy\b\s?([^"]*")/gi, (_, b, a) => b + a);
 }
 
+/**
+ * Neutralize LadiPage's "scroll-triggered entrance animation" initial-hidden
+ * CSS. LadiPage renders badges/CTA buttons/price tags with an entrance
+ * animation (fade-in, slide-up, flash, ...) and bakes their PRE-animation
+ * state directly into page CSS with `!important` so there's no flash of
+ * unstyled content:
+ *   .ladi-animation-hidden { visibility: hidden !important; opacity: 0 !important; }
+ *   #BADGE1, #BUTTON3, #HEADLINE22, #BUTTON7 { opacity: 0 !important; pointer-events: none !important; }
+ * (the 2nd form is a page-specific ID-list rule, one per page, listing every
+ * entrance-animated widget — the class alone does NOT drive visibility here).
+ * A real browser only reveals these once its own scroll/IntersectionObserver
+ * JS fires and removes the class / flips the inline style. Webcake's static
+ * clone never runs that JS, so badges, CTA buttons and price tags baked this
+ * way stay permanently invisible — that's the reported "dropped" bug for
+ * BEST SELLER badge / ĐẶT HÀNG NGAY CTA / 199.000đ price. Since both rules
+ * use !important, simply not touching the class isn't enough — the CSS
+ * itself must stop hiding the element. We bake the "already animated in"
+ * (final visible) state instead, matching the stripLazyClasses strategy.
+ */
+function stripEntranceAnimationHiding(css) {
+  let out = css.replace(/\.ladi-animation-hidden\s*\{[^}]*\}/gi, '.ladi-animation-hidden{}');
+  // Signature: a rule body containing BOTH opacity:0!important and
+  // pointer-events:none!important (order-agnostic) — LadiPage's per-page
+  // entrance-animation initial-state rule. Strip just those two
+  // declarations so any other properties on the same rule survive.
+  out = out.replace(/\{([^}]*)\}/g, (block, body) => {
+    const hasOpacityZero = /opacity\s*:\s*0\s*!important/i.test(body);
+    const hasNoPointerEvents = /pointer-events\s*:\s*none\s*!important/i.test(body);
+    if (!hasOpacityZero || !hasNoPointerEvents) return block;
+    const cleaned = body
+      .replace(/opacity\s*:\s*0\s*!important;?/gi, '')
+      .replace(/pointer-events\s*:\s*none\s*!important;?/gi, '');
+    return '{' + cleaned + '}';
+  });
+  return out;
+}
+
+/**
+ * Resolve LadiPage's "video" widget. The `.ladi-video-background` div a
+ * video widget renders is ALWAYS empty scaffolding — LadiPage injects the
+ * actual <video>/poster at runtime by reading a per-widget config keyed by
+ * widget id from `<script id="script_event_data" type="application/json">`
+ * (entries shaped like `{"a":"video","ci":"<direct src url>","ch":"direct"}`).
+ * Without running that JS, Webcake's clone shows only the empty box + the
+ * static play-icon SVG overlay — the reported "peach box, no video" bug.
+ * Mutates `doc` in place so the resolved <video> survives into each
+ * section's captured outerHTML.
+ */
+function resolveVideoWidgets(doc) {
+  const configEl = doc.getElementById('script_event_data');
+  if (!configEl) return;
+  let config;
+  try {
+    config = JSON.parse(configEl.textContent);
+  } catch {
+    return; // malformed/unexpected config shape — leave video widgets as-is
+  }
+  for (const [widgetId, meta] of Object.entries(config)) {
+    if (!meta || meta.a !== 'video' || !meta.ci) continue;
+    const widget = doc.getElementById(widgetId);
+    if (!widget) continue;
+    const bg = widget.querySelector('.ladi-video-background');
+    if (!bg || bg.querySelector('video')) continue; // already resolved / no target
+    const video = doc.createElement('video');
+    video.setAttribute('src', meta.ci);
+    video.setAttribute('controls', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;');
+    bg.appendChild(video);
+  }
+}
+
+/**
+ * Resolve LadiPage's "review" widget — PARTIAL fix only. The widget is an
+ * `<iframe class="ladi-review-iframe">` whose content (per-review cards:
+ * avatar photos, names, comments) is populated by an authenticated AJAX
+ * call to LadiPage's own backend on page load (`LadiPageApp.review_onload`)
+ * — that data never exists in the static HTML at all, so it cannot be
+ * recovered client-side without hitting LadiPage's private API (out of
+ * scope: CORS-blocked from the browser, undocumented endpoint/auth).
+ *
+ * What IS available statically is the widget's own aggregate rating summary,
+ * baked as `<script class="ladi-review-script" type="application/json">`
+ * next to the iframe (star-count distribution). We inject a small visible
+ * "★ 4.7/5 · 66 đánh giá" summary in place of the otherwise-blank iframe so
+ * the widget isn't a dead empty area — the individual review cards remain
+ * genuinely unrecoverable and are NOT rendered.
+ */
+function resolveReviewSummaries(doc) {
+  const scripts = Array.from(doc.querySelectorAll('script.ladi-review-script'));
+  for (const scriptEl of scripts) {
+    let stats;
+    try {
+      stats = JSON.parse(scriptEl.textContent);
+    } catch {
+      continue;
+    }
+    const dist = Array.isArray(stats.ea) ? stats.ea : [];
+    if (dist.length === 0) continue;
+    const total = dist.reduce((sum, d) => sum + (d.ec || 0), 0);
+    if (total <= 0) continue;
+    const weighted = dist.reduce((sum, d) => sum + (d.eb || 0) * (d.ec || 0), 0);
+    const avg = (weighted / total).toFixed(1);
+
+    const iframe = scriptEl.parentElement && scriptEl.parentElement.querySelector('.ladi-review-iframe');
+    if (!iframe) continue;
+    const summary = doc.createElement('div');
+    summary.setAttribute(
+      'style',
+      'display:flex;align-items:center;gap:8px;padding:16px;font-family:sans-serif;font-size:16px;'
+    );
+    summary.textContent = '★ ' + avg + '/5 · ' + total + ' đánh giá';
+    iframe.replaceWith(summary);
+  }
+}
+
 export function generatePkeBuffer(html, productName = 'Landing Page') {
   const escapedHtml = stripLazyClasses(html.trim());
 
@@ -298,7 +414,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   const head = headMatch ? headMatch[0] : '';
 
   // Extract CSS and JS from head to place in settings.extra_css / settings.extra_script
-  const extraCss = extractStyles(head);
+  const extraCss = stripEntranceAnimationHiding(extractStyles(head));
   const extraScript = extractScripts(head);
 
   // Detect LadiPage's design width (the .ladi-wraper width set in CSS).
@@ -331,6 +447,13 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   // Parse com-sections via DOMParser with regex fallback
   let pageSections;
   const doc = new DOMParser().parseFromString(escapedHtml, 'text/html');
+
+  // Resolve widgets whose real content only exists in a runtime JS config
+  // (video src, review rating summary) — must run BEFORE extractComSections
+  // captures each section's outerHTML, so the resolved markup is included.
+  resolveVideoWidgets(doc);
+  resolveReviewSummaries(doc);
+
   let comSections = extractComSections(escapedHtml, doc);
 
   // Filter out hidden/popup sections (LadiPage popups have empty DOM scaffolding +
