@@ -460,7 +460,20 @@ export function resolveVideoWidgets(doc) {
     // own, so the overlay is pure redundant chrome once we have a real
     // video — remove every other sibling in the widget instead of trying to
     // sync its visibility.
-    Array.from(widget.children).forEach((child) => {
+    //
+    // BUG FIX (T-23, verified against real nhanong.top/htxtaybac markup):
+    // `bg` is NOT a direct child of `widget` — the real nesting is
+    // `widget(#VIDEO6) > .ladi-video > .ladi-video-background(=bg)`, with the
+    // play-button overlay (`#SHAPE6`) as bg's SIBLING under `.ladi-video`,
+    // not widget's sibling. Iterating `widget.children` and removing
+    // "everything that isn't bg" therefore removed the `.ladi-video`
+    // wrapper itself — which IS bg's parent — deleting bg (and the <video>
+    // just appended into it) a line after inserting it. Net effect: the
+    // widget ended up completely empty, not even the original poster/play
+    // button — the reported "video lost entirely" bug. Fix: remove bg's
+    // own siblings (scoped to bg's actual parent), not widget's children.
+    const bgParent = bg.parentElement || widget;
+    Array.from(bgParent.children).forEach((child) => {
       if (child !== bg) child.remove();
     });
     // Make every other layer in the widget click-through so hit-testing
@@ -468,6 +481,139 @@ export function resolveVideoWidgets(doc) {
     // the video explicitly. pointer-events doesn't affect box size, so
     // section height/layout is untouched.
     widget.style.setProperty('pointer-events', 'none');
+  }
+}
+
+/**
+ * Extract a direct, playable video URL for a Pancake/Webcake video widget,
+ * scoped to one widget id. Checked in order, first hit wins:
+ *   1) data-video-url / data-video-src / data-src / data-video attribute
+ *      on the wrapper itself or any descendant (covers exports that DO bake
+ *      the src in statically).
+ *   2) A JSON <script> element sibling/descendant of the wrapper whose
+ *      parsed content carries a src/url/video_url/videoUrl/ci string field.
+ *   3) The page-wide `window.event_data` config (`<script id="event_data">`)
+ *      — parsed once by the caller and passed in — indexed by this widget's
+ *      DOM id, in case Pancake nests per-widget media config there.
+ * Returns `{ url, kind }` where kind is 'direct' (mp4/webm — safe to render
+ * in a static <video> tag) or 'hls' (m3u8 — NOT safe, no hls.js polyfill is
+ * injected into the static clone) or `null` when nothing was found.
+ */
+function extractPancakeVideoUrl(wrapper, eventData) {
+  const DIRECT_RE = /^https:\/\/[^\s"']+\.(?:mp4|webm)(?:\?[^\s"']*)?$/i;
+  const HLS_RE = /^https:\/\/[^\s"']+\.m3u8(?:\?[^\s"']*)?$/i;
+  const classify = (val) => {
+    if (typeof val !== 'string') return null;
+    if (DIRECT_RE.test(val)) return { url: val, kind: 'direct' };
+    if (HLS_RE.test(val)) return { url: val, kind: 'hls' };
+    return null;
+  };
+
+  // 1) data-* attributes on the wrapper or any descendant.
+  const attrNames = ['data-video-url', 'data-video-src', 'data-src', 'data-video'];
+  const nodes = [wrapper, ...Array.from(wrapper.querySelectorAll('*'))];
+  for (const el of nodes) {
+    for (const attr of attrNames) {
+      const hit = classify(el.getAttribute && el.getAttribute(attr));
+      if (hit) return hit;
+    }
+  }
+
+  // 2) JSON <script> element living inside the wrapper (mirrors how
+  // LadiPage's review widget ships its own config as a sibling script,
+  // see resolveReviewSummaries above).
+  const jsonKeys = ['src', 'url', 'video_url', 'videoUrl', 'ci'];
+  for (const scriptEl of Array.from(wrapper.querySelectorAll('script'))) {
+    let parsed;
+    try {
+      parsed = JSON.parse(scriptEl.textContent);
+    } catch {
+      continue;
+    }
+    for (const key of jsonKeys) {
+      const hit = classify(parsed && parsed[key]);
+      if (hit) return hit;
+    }
+  }
+
+  // 3) Page-wide event_data config, indexed by this widget's DOM id.
+  if (eventData && wrapper.id && eventData[wrapper.id]) {
+    const node = eventData[wrapper.id];
+    for (const key of jsonKeys) {
+      const hit = classify(node && node[key]);
+      if (hit) return hit;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve Pancake/Webcake's "video" widget — the sibling case to
+ * resolveVideoWidgets above, for pages built with Pancake's Webcake editor
+ * instead of LadiPage. Confirmed markup shape (bdsnguyennam.com/0709test2,
+ * customer Nam, T-23): `<div id="VIDEO{N}" class="ladi-element"
+ * style="pointer-events: none;"></div>` — completely empty, no
+ * `.ladi-video`/`.ladi-video-background` scaffolding at all (unlike
+ * LadiPage, which at least statically renders the poster box). Pancake
+ * mounts the real player entirely via its own runtime bundle
+ * (`/webcake/v4/{buildId}`), which Webcake's static clone never executes.
+ *
+ * VERIFIED GAP: for the real customer page above, NEITHER a data-video-url
+ * attribute NOR a matching entry in `window.event_data` exist anywhere in
+ * the captured HTML — the video src is fetched by Pancake's runtime via an
+ * API call keyed by page id + widget id, not carried in the static export
+ * at all (checked: 0 occurrences of .mp4/.m3u8/"type":"video" in the full
+ * 2.4MB clone). That specific page is therefore genuinely unresolvable by
+ * static analysis; this function still runs the extraction below in case a
+ * different Pancake/Webcake export DOES bake a data-attribute or event_data
+ * entry in (some builder versions may), and honors the same hard safety
+ * rule as resolveVideoWidgets: only mutate a container when a directly
+ * playable https mp4/webm URL was actually found. HLS (.m3u8)-only configs
+ * and "nothing found" both leave the widget byte-for-byte untouched.
+ */
+export function resolvePancakeVideos(doc) {
+  const wrappers = Array.from(doc.querySelectorAll('.ladi-element[id^="VIDEO"]')).filter((el) =>
+    /^VIDEO\d+$/i.test(el.id)
+  );
+  if (wrappers.length === 0) return;
+
+  let eventData = null;
+  const eventDataEl = doc.getElementById('event_data');
+  if (eventDataEl) {
+    const m = (eventDataEl.textContent || '').match(/window\.event_data\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+    if (m) {
+      try {
+        eventData = JSON.parse(m[1]);
+      } catch {
+        eventData = null; // malformed — extraction step 3 simply won't fire
+      }
+    }
+  }
+
+  for (const wrapper of wrappers) {
+    if (wrapper.querySelector('video')) continue; // already resolved
+
+    const found = extractPancakeVideoUrl(wrapper, eventData);
+    if (!found) continue; // nothing recoverable — leave untouched (SAFETY)
+    if (found.kind !== 'direct') {
+      console.info('[htmlToPke] Pancake video widget', wrapper.id, 'is HLS-only (m3u8) — skipping, static <video> cannot play it reliably.');
+      continue; // SAFETY: HLS-only, no hls.js in the static clone — do not mutate
+    }
+
+    const video = doc.createElement('video');
+    video.setAttribute('src', found.url);
+    video.setAttribute('controls', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;pointer-events:auto;');
+
+    // Target the .ladi-video-background box if this export happens to have
+    // one (LadiPage-style partial scaffolding); otherwise the wrapper itself
+    // is the only container (confirmed real-world shape — see module note).
+    const bg = wrapper.querySelector('.ladi-video-background') || wrapper;
+    bg.innerHTML = '';
+    bg.appendChild(video);
+    wrapper.style.setProperty('pointer-events', 'none');
   }
 }
 
@@ -670,6 +816,7 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   // (video src, review rating summary) — must run BEFORE extractComSections
   // captures each section's outerHTML, so the resolved markup is included.
   resolveVideoWidgets(doc);
+  resolvePancakeVideos(doc);
   resolveReviewSummaries(doc);
   stripBodyScripts(doc);
 
