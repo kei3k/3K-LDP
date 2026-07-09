@@ -407,7 +407,7 @@ function stripAnimationClasses(html) {
  * Mutates `doc` in place so the resolved <video> survives into each
  * section's captured outerHTML.
  */
-function resolveVideoWidgets(doc) {
+export function resolveVideoWidgets(doc) {
   const configEl = doc.getElementById('script_event_data');
   if (!configEl) return;
   let config;
@@ -418,20 +418,34 @@ function resolveVideoWidgets(doc) {
   }
   for (const [widgetId, meta] of Object.entries(config)) {
     if (!meta || meta.a !== 'video' || !meta.ci) continue;
+    // `ci` is only a directly-playable <video src> when `ch` is "direct"
+    // (verified shape: `{"a":"video","ci":"<direct src url>","ch":"direct"}`,
+    // see module comment above). Other channel values (YouTube/Vimeo embeds,
+    // or any future/unrecognized `ch`) store an embed ID or non-video-file
+    // URL in `ci`, not something a <video> tag can play. Regression fix:
+    // this used to be assumed unconditionally, so a non-"direct" widget got
+    // its static poster+play-icon wiped (below) in favor of a <video> that
+    // silently failed to load — box goes visibly empty ("video disappeared"
+    // bug report), which is strictly worse than the old stuck-play-button
+    // overlay it replaced. Bail out here for anything we can't confidently
+    // resolve so the widget is left byte-for-byte as LadiPage rendered it.
+    if (meta.ch !== 'direct' || !/^https?:\/\//i.test(meta.ci)) continue;
     const widget = doc.getElementById(widgetId);
     if (!widget) continue;
     const bg = widget.querySelector('.ladi-video-background');
     if (!bg || bg.querySelector('video')) continue; // already resolved / no target
-    // Clear any pre-existing static content inside the background box (e.g.
-    // a poster <img> or play-icon <svg> LadiPage baked in) before inserting
-    // the real video — the clone never removed these, so left in place they
-    // can still paint on top of the video depending on stacking context.
-    bg.innerHTML = '';
     const video = doc.createElement('video');
     video.setAttribute('src', meta.ci);
     video.setAttribute('controls', '');
     video.setAttribute('playsinline', '');
     video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;pointer-events:auto;');
+    // Only now — with a real <video> built and confirmed pointed at a
+    // direct URL — do we touch the widget's existing markup. Clear any
+    // pre-existing static content inside the background box (e.g. a poster
+    // <img> or play-icon <svg> LadiPage baked in) and insert the real
+    // video; any bail-out above skips this entirely, leaving the original
+    // poster + play icon visible exactly like the pre-regression build.
+    bg.innerHTML = '';
     bg.appendChild(video);
     // LadiPage renders a static play-button overlay (e.g. a `SHAPE...` div)
     // stacked on top of this widget with no click handler AND no "hide on
