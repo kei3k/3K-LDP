@@ -422,6 +422,11 @@ function resolveVideoWidgets(doc) {
     if (!widget) continue;
     const bg = widget.querySelector('.ladi-video-background');
     if (!bg || bg.querySelector('video')) continue; // already resolved / no target
+    // Clear any pre-existing static content inside the background box (e.g.
+    // a poster <img> or play-icon <svg> LadiPage baked in) before inserting
+    // the real video — the clone never removed these, so left in place they
+    // can still paint on top of the video depending on stacking context.
+    bg.innerHTML = '';
     const video = doc.createElement('video');
     video.setAttribute('src', meta.ci);
     video.setAttribute('controls', '');
@@ -429,12 +434,25 @@ function resolveVideoWidgets(doc) {
     video.setAttribute('style', 'width:100%;height:100%;object-fit:cover;pointer-events:auto;');
     bg.appendChild(video);
     // LadiPage renders a static play-button overlay (e.g. a `SHAPE...` div)
-    // stacked on top of this widget with no click handler in the static
-    // clone, occluding the native <video controls> underneath — the
-    // "video not clickable" bug. Make every other layer in the widget
-    // click-through so hit-testing falls to the video regardless of DOM/
-    // z-index order, then re-enable the video explicitly. pointer-events
-    // doesn't affect box size, so section height/layout is untouched.
+    // stacked on top of this widget with no click handler AND no "hide on
+    // play" behaviour in the static clone — it occludes the native <video
+    // controls> underneath (fixed below via pointer-events) but also stays
+    // stuck on top of the video WHILE IT PLAYS, since nothing ever toggles
+    // its visibility (LadiPage does that at runtime via its own JS, which
+    // this static clone doesn't have — and Webcake strips any <script> we
+    // could inject to listen for the video's 'play' event, see
+    // stripBodyScripts below). Native <video controls> already supplies its
+    // own play affordance that the browser shows/hides correctly on its
+    // own, so the overlay is pure redundant chrome once we have a real
+    // video — remove every other sibling in the widget instead of trying to
+    // sync its visibility.
+    Array.from(widget.children).forEach((child) => {
+      if (child !== bg) child.remove();
+    });
+    // Make every other layer in the widget click-through so hit-testing
+    // falls to the video regardless of DOM/z-index order, then re-enable
+    // the video explicitly. pointer-events doesn't affect box size, so
+    // section height/layout is untouched.
     widget.style.setProperty('pointer-events', 'none');
   }
 }
