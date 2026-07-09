@@ -115,8 +115,12 @@ function extractComSections(html, doc) {
   return regexExtractLadiSections(html);
 }
 
-// Build a single PKE section object with a nested text-block
-function buildSection({ html, name, sectionIndex, height, canvasDesktop = 1200 }) {
+// Build a single PKE section object with a nested text-block.
+// `extraChildren` — additional NATIVE Webcake widget objects (e.g. a
+// resolved `type: 'countdown'`, see resolveCountdowns below) to render as
+// siblings of the text-block, positioned in the same section-relative
+// coordinate space (top:0,left:0 == section's own top-left corner).
+function buildSection({ html, name, sectionIndex, height, canvasDesktop = 1200, extraChildren = [] }) {
   const sectionId = generateId();
   const textBlockId = generateId();
   return {
@@ -155,7 +159,8 @@ function buildSection({ html, name, sectionIndex, height, canvasDesktop = 1200 }
         id: textBlockId,
         events: [],
         children: []
-      }
+      },
+      ...extraChildren
     ]
   };
 }
@@ -741,6 +746,196 @@ function resolveReviewSummaries(doc) {
 }
 
 /**
+ * Read a numeric `prop:Npx` declaration out of a CSS rule body. Returns
+ * NaN when the rule/property isn't present (caller checks Number.isFinite).
+ */
+function readPx(body, prop) {
+  const m = body.match(new RegExp('\\b' + prop + '\\s*:\\s*(-?\\d+(?:\\.\\d+)?)px', 'i'));
+  return m ? parseFloat(m[1]) : NaN;
+}
+
+/**
+ * Sum the top/left of every ancestor between `el` and `sectionEl` that
+ * carries its own `#id{top:...;left:...}` CSS rule. LadiPage/Pancake nest
+ * absolutely-positioned "group" wrappers inside a section (verified:
+ * hangnhapkhau.pro.vn/urea — the countdown's own `#w-ft2twjuz{top:22px;
+ * left:17.5px}` is relative to its immediate `#w-y5hbyu1p{top:6px;
+ * left:55px}` group wrapper, NOT the section root directly). Structural-only
+ * wrappers (`.section-wrapper`, `.section-container`, `.group-container`)
+ * carry no `id` attribute and therefore no CSS rule of their own — they
+ * don't contribute an offset, only real positioned group wrappers do.
+ */
+function cumulativeGroupOffset(el, sectionEl, head) {
+  let top = 0;
+  let left = 0;
+  let node = el.parentElement;
+  while (node && node !== sectionEl) {
+    if (node.id) {
+      const escId = node.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const m = head.match(new RegExp('#' + escId + '\\s*\\{([^}]*)\\}', 'i'));
+      if (m) {
+        const t = readPx(m[1], 'top');
+        const l = readPx(m[1], 'left');
+        if (Number.isFinite(t)) top += t;
+        if (Number.isFinite(l)) left += l;
+      }
+    }
+    node = node.parentElement;
+  }
+  return { top, left };
+}
+
+/**
+ * Resolve Pancake's "countdown" widget (`<div class="com-countdown">`) into
+ * Webcake's OWN NATIVE `type: 'countdown'` PKE widget — verified against a
+ * real Webcake export (dong-ho-tron-fb.pke, 3 confirmed instances) to be a
+ * genuinely Webcake-engine-rendered, LIVE-TICKING widget. Unlike every other
+ * widget resolved in this file (baked as raw HTML inside a text-block's
+ * specials.text — dead the moment Webcake strips our injected JS), Webcake's
+ * OWN runtime owns this widget's tick logic, so this is the one case where a
+ * real ticking countdown survives the clone. Confirmed schema (fields seen
+ * on all 3 real instances):
+ *   specials: { type:'minute', startTime:<ISO no-Z>, duration:<minutes>,
+ *               showDay, showHour, showSecond, showText,
+ *               customize:'customize', animateMode }
+ * `duration` is always expressed in MINUTES regardless of which unit boxes
+ * are shown; showDay/showHour/showSecond just toggle which unit boxes render
+ * out of that total — the minute box itself is implicitly always shown.
+ *
+ * BUG THIS FIXES (T-23 reopened, customer report on
+ * hangnhapkhau.pro.vn/urea): Pancake's countdown widget carries NO real
+ * deadline anywhere in the static HTML export — same unresolvable-at-clone-
+ * time gap already documented in resolvePancakeVideos above (Pancake
+ * resolves it via its own backend, keyed by page+widget id, never baked into
+ * the page). Left as static markup, the digit boxes freeze at whatever
+ * value existed at crawl time; on a Pancake export that instead uses the
+ * widget's flip-clock rendering variant (page's own CSS ships dead
+ * `.countdown-wrapper .timer-number`/`.show`/`.next` rules for this even
+ * when unused, confirmed present on this very page) a static clone would
+ * render every stacked digit-slice simultaneously — the reported "garbled
+ * digit boxes". We don't try to guess the seller's original deadline (same
+ * reasoning as the video gap: it's not recoverable, and the clone is a new
+ * campaign anyway) — instead we start a FRESH countdown at clone time
+ * (startTime = now) with a duration inferred from which unit boxes the
+ * source widget itself shows, matching its visual granularity.
+ *
+ * Positioning: the widget's own `#id{top;left;width;height}` CSS rule is
+ * relative to its nearest positioned ancestor GROUP wrapper, not always the
+ * section root directly (see cumulativeGroupOffset above) — resolved so the
+ * native widget lands exactly where the static box used to be.
+ *
+ * SAFETY: only mutates when the widget's own box CSS *and* every ancestor
+ * group offset needed to place it are cleanly resolvable. Otherwise the
+ * widget is left completely untouched (same "don't guess" rule as every
+ * other resolver in this file) — no partial/best-effort placement that could
+ * land it somewhere worse than the original static freeze.
+ *
+ * Returns a Map of sectionId -> [countdown widget PKE object]. Removes the
+ * resolved widget from `doc` so it isn't ALSO dumped as dead static markup
+ * inside that section's text-block HTML.
+ */
+export function resolveCountdowns(doc, head) {
+  const bySection = new Map();
+  const widgets = Array.from(doc.querySelectorAll('.com-countdown'));
+  for (const el of widgets) {
+    if (!el.id) continue;
+    const wrapper = el.querySelector('.countdown-wrapper') || el;
+    const sectionEl = el.closest('.com-section');
+    if (!sectionEl || !sectionEl.id) continue; // no section to anchor it in — leave untouched
+
+    const escId = el.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boxM = head.match(new RegExp('#' + escId + '\\s*\\{([^}]*)\\}', 'i'));
+    if (!boxM) continue; // no positioning info — unsafe to place natively
+
+    const ownTop = readPx(boxM[1], 'top');
+    const ownLeft = readPx(boxM[1], 'left');
+    const width = readPx(boxM[1], 'width');
+    const height = readPx(boxM[1], 'height');
+    if (![ownTop, ownLeft, width, height].every(Number.isFinite)) continue;
+
+    const offset = cumulativeGroupOffset(el, sectionEl, head);
+    const top = offset.top + ownTop;
+    const left = offset.left + ownLeft;
+
+    // Per-item styling from `#id .countdown-item{...}` — best-effort, missing
+    // properties simply aren't set (Webcake widget still renders with its
+    // own defaults).
+    const itemM = head.match(new RegExp('#' + escId + '\\s+\\.countdown-item\\s*\\{([^}]*)\\}', 'i'));
+    const itemBody = itemM ? itemM[1] : '';
+    const grabDecl = (prop) => {
+      const m = itemBody.match(new RegExp('\\b' + prop + '\\s*:\\s*([^;]+);'));
+      return m ? m[1].trim() : undefined;
+    };
+    const fontSize = readPx(itemBody, 'font-size');
+    const borderWidth = readPx(itemBody, 'border-width');
+
+    // Which unit boxes the source shows — Pancake bakes the author's
+    // show/hide choice as inline `style="display:none"` on each
+    // `.countdown-item-*` node (absence of the attribute, or an explicit
+    // empty style="", both mean "visible").
+    const isHidden = (cls) => {
+      const item = wrapper.querySelector('.' + cls);
+      return !!item && /display\s*:\s*none/i.test(item.getAttribute('style') || '');
+    };
+    const showDay = !isHidden('countdown-item-day');
+    const showHour = !isHidden('countdown-item-hour');
+    const showSecond = !isHidden('countdown-item-second');
+    const minuteText = wrapper.querySelector('.countdown-item-minute .text');
+    const showText = !!minuteText && !/display\s*:\s*none/i.test(minuteText.getAttribute('style') || '');
+
+    // Deadline is unrecoverable (see module comment) — start fresh at clone
+    // time, duration sized to match the widest unit box actually shown.
+    const duration = showDay ? 3 * 24 * 60 : showHour ? 12 * 60 : 60;
+
+    const buildStyles = () => {
+      const styles = { zIndex: '', width, top, left, height, textAlign: 'center' };
+      const fontWeight = grabDecl('font-weight');
+      const color = grabDecl('color');
+      const borderStyle = grabDecl('border-style');
+      const borderColor = grabDecl('border-color');
+      const background = grabDecl('background');
+      if (fontWeight) styles.fontWeight = fontWeight;
+      if (Number.isFinite(fontSize)) styles.fontSize = fontSize;
+      if (color) styles.color = color;
+      if (Number.isFinite(borderWidth)) styles.borderWidth = borderWidth;
+      if (borderStyle) styles.borderStyle = borderStyle;
+      if (borderColor) styles.borderColor = borderColor;
+      if (background) styles.background = background;
+      return styles;
+    };
+
+    const countdownWidget = {
+      type: 'countdown',
+      specials: {
+        type: 'minute',
+        startTime: new Date().toISOString().slice(0, 19),
+        showText,
+        showSecond,
+        showHour,
+        showDay,
+        duration,
+        customize: 'customize',
+        animateMode: wrapper.getAttribute('data-mode') || 'none'
+      },
+      runtime: { firstInit: 'mobile', changeSection: true },
+      responsive: {
+        mobile: { styles: buildStyles(), config: { notloaded: false, borderColorHidden: {}, bgHidden: {} } },
+        desktop: { styles: buildStyles(), config: { notloaded: false, borderColorHidden: {}, bgHidden: {} } }
+      },
+      properties: { sync: true, name: 'countdown_' + generateId(), movable: true },
+      id: generateId(),
+      events: []
+    };
+
+    if (!bySection.has(sectionEl.id)) bySection.set(sectionEl.id, []);
+    bySection.get(sectionEl.id).push(countdownWidget);
+
+    el.remove(); // drop the dead static markup — the native widget replaces it
+  }
+  return bySection;
+}
+
+/**
  * Remove leftover <script>/<noscript>/<template> tags sitting directly in
  * the page BODY before each section's outerHTML is captured (regression
  * fix — malformed duplicate elements on publish).
@@ -813,11 +1008,14 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
   const doc = new DOMParser().parseFromString(escapedHtml, 'text/html');
 
   // Resolve widgets whose real content only exists in a runtime JS config
-  // (video src, review rating summary) — must run BEFORE extractComSections
-  // captures each section's outerHTML, so the resolved markup is included.
+  // (video src, review rating summary, countdown deadline) — must run
+  // BEFORE extractComSections captures each section's outerHTML, so the
+  // resolved markup is included. resolveCountdowns removes the widget from
+  // `doc` and returns per-section native widgets to splice in below instead.
   resolveVideoWidgets(doc);
   resolvePancakeVideos(doc);
   resolveReviewSummaries(doc);
+  const countdownsBySection = resolveCountdowns(doc, head);
   stripBodyScripts(doc);
 
   let comSections = extractComSections(escapedHtml, doc);
@@ -902,7 +1100,8 @@ export function generatePkeBuffer(html, productName = 'Landing Page') {
       }
 
       const wrappedHtml = inlineStyleTag + sec.outerHTML;
-      return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight, canvasDesktop });
+      const extraChildren = countdownsBySection.get(sectionElementId) || [];
+      return buildSection({ html: wrappedHtml, name, sectionIndex, height: sectionHeight, canvasDesktop, extraChildren });
     });
   }
 
