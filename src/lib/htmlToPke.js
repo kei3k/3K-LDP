@@ -917,7 +917,21 @@ export function resolveCountdowns(doc, head) {
         customize: 'customize',
         animateMode: wrapper.getAttribute('data-mode') || 'none'
       },
-      runtime: { firstInit: 'mobile', changeSection: true },
+      // BUGFIX (T-23 re-reopened, countdown disappears entirely on publish):
+      // `firstInit`/`changeSection` are Webcake EDITOR *session state*, not
+      // widget schema — the real dong-ho-tron-fb.pke export we verified
+      // against had already been opened in the editor once, which stamps
+      // firstInit to the breakpoint that triggered the widget's lazy mount
+      // and changeSection:true once that mount handler has run. Copying
+      // that already-initialized state onto a freshly synthesized widget
+      // means Webcake's publish-time renderer (which never runs the
+      // editor's lazy-mount trigger) thinks the countdown was already
+      // mounted and skips mounting it — the widget's DOM/ticking-interval
+      // never gets created, so it doesn't render at all. Every other widget
+      // this file synthesizes (section, text-block) uses the fresh/never-
+      // initialized state `firstInit: false` and those DO render correctly
+      // after clone+publish; match that same convention here.
+      runtime: { firstInit: false },
       responsive: {
         mobile: { styles: buildStyles(), config: { notloaded: false, borderColorHidden: {}, bgHidden: {} } },
         desktop: { styles: buildStyles(), config: { notloaded: false, borderColorHidden: {}, bgHidden: {} } }

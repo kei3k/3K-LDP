@@ -105,6 +105,14 @@ console.log('Fixture (a): countdown widget -> resolved to native PKE widget');
     assert(cd.specials.type === 'minute', 'specials.type=minute (matches real Webcake export schema)');
     assert(cd.specials.duration === 60, 'duration=60min default (only minute+second visible granularity)');
     assert(typeof cd.specials.startTime === 'string' && cd.specials.startTime.length > 0, 'startTime is set');
+    // Regression guard: widget disappeared entirely on publish because it was
+    // stamped with editor SESSION state (firstInit:'mobile', changeSection:true)
+    // copied verbatim off an already-opened real export, instead of the
+    // fresh/never-initialized state every other synthesized widget uses.
+    // Webcake's publish renderer never runs the editor's lazy-mount trigger,
+    // so a widget claiming to already be initialized never gets mounted.
+    assert(cd.runtime.firstInit === false, 'runtime.firstInit=false (fresh widget, not stale editor session state), got ' + JSON.stringify(cd.runtime.firstInit));
+    assert(cd.runtime.changeSection === undefined, 'runtime.changeSection not set (matches section/text-block convention), got ' + JSON.stringify(cd.runtime.changeSection));
   }
 
   // The dead static countdown markup must NOT survive into the text-block's
